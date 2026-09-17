@@ -9,6 +9,8 @@ from app.pipeline.orchestrator import run_pipeline
 from app.models.schema import TroubleshootRequest, TroubleshootResponse
 from app.cache.semantic_cache import cache
 
+from fastapi.middleware.cors import CORSMiddleware
+
 _state: dict = {}
 
 
@@ -23,6 +25,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Smart Guided Troubleshooting Engine", lifespan=lifespan)
+
+# Frontend is a standalone HTML file (opened via file:// or a separate dev
+# server), so it's a different origin from the API — without this, the
+# browser blocks every fetch() call with a CORS error before it even
+# reaches your endpoint. Wide open here since this is a local demo tool,
+# not a public API — tighten origins if you ever deploy this for real.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
