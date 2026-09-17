@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Guided Troubleshooting Engine</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @keyframes pulse-bar { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .loading-bar { animation: pulse-bar 1.2s ease-in-out infinite; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+<div class="max-w-3xl mx-auto px-6 py-10">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-2xl font-semibold tracking-tight">Smart Guided Troubleshooting Engine</h1>
+    <p class="text-slate-500 mt-1 text-sm">Complaint in, validated fix plan out — with a semantic cache that skips the LLM on repeat issues.</p>
+  </div>
+
+  <!-- Input form -->
+  <div class="bg-white border border-slate-200 rounded-lg p-5 mb-6">
+    <label class="block text-sm font-medium text-slate-700 mb-1.5">Device complaint</label>
+    <textarea id="query" rows="2"
+      class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+      placeholder="e.g. screen flickers and the battery dies fast"></textarea>
+
+    <label class="block text-sm font-medium text-slate-700 mt-4 mb-1.5">Reference text <span class="text-slate-400 font-normal">(optional — leave blank to test cache-only lookup)</span></label>
+    <textarea id="siis_response" rows="3"
+      class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+      placeholder="Paste internal support/reference documentation here"></textarea>
+
+    <div class="flex items-center justify-between mt-4">
+      <label class="flex items-center gap-2 text-sm text-slate-600">
+        <input type="text" id="apiBase" value="http://localhost:8000"
+          class="border border-slate-300 rounded px-2 py-1 text-xs w-48 focus:outline-none focus:ring-1 focus:ring-slate-400">
+        API base
+      </label>
+      <button id="submitBtn"
+        class="bg-slate-900 text-white text-sm font-medium px-5 py-2 rounded-md hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+        Get troubleshooting plan
+      </button>
+    </div>
+  </div>
+
+  <!-- Result area -->
+  <div id="resultArea" class="hidden mb-6"></div>
+
+  <!-- Cache stats panel -->
+  <div class="bg-white border border-slate-200 rounded-lg p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-slate-700">Semantic cache</h2>
+      <button id="refreshCacheBtn" class="text-xs text-slate-400 hover:text-slate-600">refresh</button>
+    </div>
+    <div id="cacheStats" class="text-sm text-slate-500">No data yet — send a query to populate the cache.</div>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderLatencyBadge(meta) {
+  const isFast = meta.cache_hit;
+  const color = isFast ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
+  const label = isFast ? 'CACHE HIT' : 'LLM CALL';
+  return `
+    <div class="flex items-center gap-3 text-xs">
+      <span class="px-2 py-0.5 rounded font-medium ${color}">${label}</span>
+      <span class="text-slate-500">${meta.latency_ms.toFixed(1)}ms</span>
+      <span class="text-slate-400">·</span>
+      <span class="text-slate-500">${escapeHtml(meta.model)}</span>
+      ${meta.cache_similarity != null ? `<span class="text-slate-400">·</span><span class="text-slate-500">similarity ${meta.cache_similarity.toFixed(3)}</span>` : ''}
+    </div>`;
+}
+
+function renderAction(action) {
+  const categoryColor = {
+    auto: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    manual: 'bg-slate-50 text-slate-600 border-slate-200',
+    critical: 'bg-red-50 text-red-700 border-red-200',
+  }[action.category] || 'bg-slate-50 text-slate-600 border-slate-200';
+
+  const steps = action.stepGroups.flatMap(sg => sg.steps);
+  const deeplink = action.stepGroups.find(sg => sg.actionableDeeplink)?.actionableDeeplink;
+
+  return `
+    <div class="border border-slate-200 rounded-md p-4">
+      <div class="flex items-start justify-between gap-3 mb-2">
+        <h3 class="font-medium text-sm">${escapeHtml(action.actionName)}</h3>
+        <span class="text-[10px] font-medium px-1.5 py-0.5 rounded border ${categoryColor} shrink-0">${action.category}</span>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">${escapeHtml(action.description)}</p>
+      <ol class="text-sm space-y-1 mb-3 list-decimal list-inside text-slate-700">
+        ${steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+      </ol>
+      ${deeplink ? `
+        <button class="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+          title="${escapeHtml(deeplink.deeplink)}">
+          → ${escapeHtml(deeplink.message || deeplink.description)}
+        </button>` : `
+        <p class="text-xs text-slate-400 italic">No direct settings link for this step</p>`}
+    </div>`;
+}
+
+function renderResult(data) {
+  const goal = data.response.contexts?.[0];
+
+  if (!goal) {
+    const reason = data.response.fallback || 'no_match';
+    return `
+      <div class="bg-white border border-slate-200 rounded-lg p-5">
+        ${renderLatencyBadge(data.meta)}
+        <div class="mt-4 flex items-start gap-2 text-sm text-slate-600">
+          <span class="text-slate-400">—</span>
+          <span>No troubleshooting plan found (<code class="text-xs bg-slate-100 px-1 rounded">${escapeHtml(reason)}</code>).
+          ${reason === 'no_match' ? 'This usually means no reference text was provided, or the reference text has no viable fix for this complaint.' : 'Check server logs for details.'}</span>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="bg-white border border-slate-200 rounded-lg p-5">
+      ${renderLatencyBadge(data.meta)}
+      <h2 class="font-semibold mt-3 mb-1">${escapeHtml(goal.title)}</h2>
+      <p class="text-xs text-slate-400 mb-4">confidence ${(goal.score * 100).toFixed(0)}%</p>
+      <div class="space-y-3">
+        ${goal.actions.map(renderAction).join('')}
+      </div>
+    </div>`;
+}
+
+async function submitQuery() {
+  const query = $('query').value.trim();
+  if (!query) return;
+
+  const apiBase = $('apiBase').value.trim().replace(/\/$/, '');
+  const siisResponse = $('siis_response').value.trim();
+  const btn = $('submitBtn');
+  const resultArea = $('resultArea');
+
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+  resultArea.classList.remove('hidden');
+  resultArea.innerHTML = `
+    <div class="bg-white border border-slate-200 rounded-lg p-5">
+      <div class="loading-bar text-sm text-slate-400">Checking cache, then running pipeline if needed (cold calls can take several seconds)…</div>
+    </div>`;
+
+  try {
+    const body = { query };
+    if (siisResponse) body.siis_response = siisResponse;
+
+    const resp = await fetch(`${apiBase}/v1/troubleshoot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      resultArea.innerHTML = `
+        <div class="bg-white border border-red-200 rounded-lg p-5 text-sm text-red-600">
+          Request failed (HTTP ${resp.status}). Check that the API is running at ${escapeHtml(apiBase)}.
+        </div>`;
+      return;
+    }
+
+    const data = await resp.json();
+    resultArea.innerHTML = renderResult(data);
+    refreshCacheStats();
+  } catch (err) {
+    resultArea.innerHTML = `
+      <div class="bg-white border border-red-200 rounded-lg p-5 text-sm text-red-600">
+        Couldn't reach the API at ${escapeHtml(apiBase)}. Is the server running?
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Get troubleshooting plan';
+  }
+}
+
+async function refreshCacheStats() {
+  const apiBase = $('apiBase').value.trim().replace(/\/$/, '');
+  const el = $('cacheStats');
+  try {
+    const resp = await fetch(`${apiBase}/v1/cache/stats`);
+    const stats = await resp.json();
+
+    if (stats.num_clusters === 0) {
+      el.innerHTML = 'No data yet — send a query to populate the cache.';
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="flex gap-6 mb-3">
+        <div>
+          <div class="text-2xl font-semibold">${stats.num_clusters}</div>
+          <div class="text-xs text-slate-400">distinct issues cached</div>
+        </div>
+        <div>
+          <div class="text-2xl font-semibold">${stats.total_paraphrases_absorbed}</div>
+          <div class="text-xs text-slate-400">paraphrases absorbed</div>
+        </div>
+      </div>
+      <div class="space-y-2">
+        ${stats.clusters.map(c => `
+          <div class="text-xs border-t border-slate-100 pt-2">
+            <div class="font-medium text-slate-700">${escapeHtml(c.canonical_query)}</div>
+            <div class="text-slate-400 mt-0.5">${c.merged_count} paraphrase${c.merged_count !== 1 ? 's' : ''} matched to this cluster</div>
+          </div>`).join('')}
+      </div>`;
+  } catch {
+    el.innerHTML = '<span class="text-red-500">Could not reach API to load cache stats.</span>';
+  }
+}
+
+$('submitBtn').addEventListener('click', submitQuery);
+$('refreshCacheBtn').addEventListener('click', refreshCacheStats);
+$('query').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.metaKey) submitQuery();
+});
+
+refreshCacheStats();
+</script>
+
+</body>
+</html>
