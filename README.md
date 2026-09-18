@@ -91,7 +91,7 @@ curl -X POST http://localhost:8000/v1/troubleshoot \
 
 ## Status
 
-🚧 Actively in development for the hackathon submission (due 25 Sep 2026).
+🚧 Actively in development for the hackathon submission.
 Core pipeline, schema validation, hybrid retrieval, and semantic caching
 are implemented and tested. Real competition dataset integration, ablation
 study, and frontend are in progress.
