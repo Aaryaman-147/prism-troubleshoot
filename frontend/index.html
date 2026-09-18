@@ -27,6 +27,26 @@
       class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
       placeholder="e.g. screen flickers and the battery dies fast"></textarea>
 
+    <!-- P1: example complaints so a judge doesn't have to think one up -->
+    <div class="flex flex-wrap gap-1.5 mt-2">
+      <span class="text-xs text-slate-400 py-1">Try:</span>
+      <button class="example-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
+        data-query="screen flickers and the battery dies fast"
+        data-reference="Display flickering combined with rapid battery drain is commonly caused by adaptive brightness conflicting with a third-party app, or a stuck refresh-rate setting. Open Settings, then Display, then Motion smoothness, and set it to Standard instead of Adaptive.">
+        Screen flicker + battery
+      </button>
+      <button class="example-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
+        data-query="swipe gestures go the wrong direction after installing an app"
+        data-reference="After installing a new app, swipe gesture navigation can occasionally default to scroll-style movement instead of directional swipes. Open Settings, then Display, then Navigation bar, and confirm Swipe gestures is selected rather than Buttons.">
+        Swipe gestures wrong
+      </button>
+      <button class="example-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
+        data-query="my phone got slow after the update"
+        data-reference="Performance slowdown after a system update is often caused by background app re-indexing or cache rebuilding. Open Settings, then Apps, then check Background usage limits, and consider clearing the system cache via Storage settings.">
+        Slow after update
+      </button>
+    </div>
+
     <label class="block text-sm font-medium text-slate-700 mt-4 mb-1.5">Reference text <span class="text-slate-400 font-normal">(optional — leave blank to test cache-only lookup)</span></label>
     <textarea id="siis_response" rows="3"
       class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
@@ -45,11 +65,18 @@
     </div>
   </div>
 
+  <!-- P1: guided paraphrase-demo banner, shown after a successful cold call -->
+  <div id="paraphraseHint" class="hidden bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 text-sm text-blue-800">
+    That was a cold call (real LLM run). Try submitting a
+    <button id="tryParaphraseBtn" class="underline font-medium hover:text-blue-900">reworded version of the same complaint</button>
+    now — no reference text needed — to see the cache serve it instantly.
+  </div>
+
   <!-- Result area -->
   <div id="resultArea" class="hidden mb-6"></div>
 
   <!-- Cache stats panel -->
-  <div class="bg-white border border-slate-200 rounded-lg p-5">
+  <div class="bg-white border border-slate-200 rounded-lg p-5 mb-6">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-sm font-semibold text-slate-700">Semantic cache</h2>
       <button id="refreshCacheBtn" class="text-xs text-slate-400 hover:text-slate-600">refresh</button>
@@ -57,10 +84,22 @@
     <div id="cacheStats" class="text-sm text-slate-500">No data yet — send a query to populate the cache.</div>
   </div>
 
+  <!-- P2: request history, so a demo session's progression is visible at a glance -->
+  <div class="bg-white border border-slate-200 rounded-lg p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-slate-700">Session history</h2>
+      <button id="clearHistoryBtn" class="text-xs text-slate-400 hover:text-slate-600">clear</button>
+    </div>
+    <div id="requestHistory" class="text-sm text-slate-400">No requests yet this session.</div>
+  </div>
+
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
+let requestHistory = [];
+let lastQuery = null;
+let lastWasColdSuccess = false;
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -147,6 +186,7 @@ async function submitQuery() {
   const btn = $('submitBtn');
   const resultArea = $('resultArea');
 
+  $('paraphraseHint').classList.add('hidden');
   btn.disabled = true;
   btn.textContent = 'Thinking…';
   resultArea.classList.remove('hidden');
@@ -170,21 +210,70 @@ async function submitQuery() {
         <div class="bg-white border border-red-200 rounded-lg p-5 text-sm text-red-600">
           Request failed (HTTP ${resp.status}). Check that the API is running at ${escapeHtml(apiBase)}.
         </div>`;
+      addToHistory(query, null, false);
       return;
     }
 
     const data = await resp.json();
     resultArea.innerHTML = renderResult(data);
     refreshCacheStats();
+
+    const succeeded = data.response.contexts && data.response.contexts.length > 0;
+    addToHistory(query, data.meta, succeeded);
+
+    // P1: guided paraphrase-demo prompt — only makes sense right after a
+    // genuine cold-path success, so the next hit is a meaningful contrast.
+    if (succeeded && !data.meta.cache_hit) {
+      lastQuery = query;
+      lastWasColdSuccess = true;
+      $('paraphraseHint').classList.remove('hidden');
+    }
   } catch (err) {
     resultArea.innerHTML = `
       <div class="bg-white border border-red-200 rounded-lg p-5 text-sm text-red-600">
         Couldn't reach the API at ${escapeHtml(apiBase)}. Is the server running?
       </div>`;
+    addToHistory(query, null, false);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Get troubleshooting plan';
   }
+}
+
+function addToHistory(query, meta, succeeded) {
+  requestHistory.unshift({ query, meta, succeeded, time: new Date() });
+  requestHistory = requestHistory.slice(0, 10); // keep last 10
+  renderHistory();
+}
+
+function renderHistory() {
+  const el = $('requestHistory');
+  if (requestHistory.length === 0) {
+    el.innerHTML = 'No requests yet this session.';
+    return;
+  }
+
+  el.innerHTML = requestHistory.map(h => {
+    const statusDot = h.succeeded
+      ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>'
+      : '<span class="w-1.5 h-1.5 rounded-full bg-slate-300 inline-block"></span>';
+    const cacheTag = h.meta?.cache_hit
+      ? '<span class="text-[10px] font-medium text-emerald-600">CACHE</span>'
+      : h.meta ? '<span class="text-[10px] font-medium text-amber-600">LLM</span>' : '';
+    const latency = h.meta ? `${h.meta.latency_ms.toFixed(0)}ms` : '—';
+    return `
+      <div class="flex items-center gap-2 py-1.5 border-t border-slate-100 first:border-t-0 first:pt-0">
+        ${statusDot}
+        <span class="flex-1 truncate text-slate-600">${escapeHtml(h.query)}</span>
+        ${cacheTag}
+        <span class="text-slate-400 w-16 text-right">${latency}</span>
+      </div>`;
+  }).join('');
+}
+
+function clearHistory() {
+  requestHistory = [];
+  renderHistory();
 }
 
 async function refreshCacheStats() {
@@ -224,8 +313,29 @@ async function refreshCacheStats() {
 
 $('submitBtn').addEventListener('click', submitQuery);
 $('refreshCacheBtn').addEventListener('click', refreshCacheStats);
+$('clearHistoryBtn').addEventListener('click', clearHistory);
 $('query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.metaKey) submitQuery();
+});
+
+// P1: example-complaint buttons populate the form instantly
+document.querySelectorAll('.example-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('query').value = btn.dataset.query;
+    $('siis_response').value = btn.dataset.reference;
+    $('paraphraseHint').classList.add('hidden');
+  });
+});
+
+// P1: clicking the paraphrase prompt clears the reference text (proving
+// the cache — not a re-supplied reference — is what answers it) and
+// focuses the query box so the user can type a reworded version.
+$('tryParaphraseBtn').addEventListener('click', () => {
+  $('siis_response').value = '';
+  $('query').value = '';
+  $('query').placeholder = `Try rewording: "${lastQuery}"`;
+  $('query').focus();
+  $('paraphraseHint').classList.add('hidden');
 });
 
 refreshCacheStats();
