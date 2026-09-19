@@ -50,14 +50,24 @@ Complaint ──▶ [Cache Check] ──HIT──▶ return in single-digit ms
              Cache Write (semantic cluster) + Response
 ```
 
-## Differentiator: semantic cache clustering
+## Differentiators
 
-Most naive caching relies on exact-string keys, which miss on paraphrased
-repeat queries and either tank the hit rate or fragment into near-duplicate
-entries. This cache instead clusters queries by embedding similarity, with
-each cluster's centroid updated as a running mean as new paraphrases are
-absorbed — avoiding fragmentation while keeping every cache hit
-semantically grounded.
+**Semantic cache clustering.** Most naive caching relies on exact-string
+keys, which miss on paraphrased repeat queries and either tank the hit rate
+or fragment into near-duplicate entries. This cache instead clusters queries
+by embedding similarity: a query is scored against every phrasing already
+stored in a cluster (not just an averaged centroid), so an exact repeat and
+a genuine paraphrase both resolve correctly. A failed/fallback response is
+never cached, so a transient extraction failure can't get permanently
+"frozen" as the answer for that issue. Thread-safe under concurrent
+requests.
+
+**Honest abstention over confident guessing.** Deeplink matching runs
+against a minimum-confidence floor and an ambiguity margin (reject the top
+match if a close second is nearly as good). A missing deeplink is an honest
+answer; a wrong one silently sends the user to the wrong settings screen
+while looking correct. This is tuned and measured, not just asserted — see
+[Ablation study](#ablation-study) below.
 
 ## Tech stack
 
