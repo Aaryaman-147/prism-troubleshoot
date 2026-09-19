@@ -49,7 +49,7 @@ async def health():
 async def troubleshoot(req: TroubleshootRequest):
     if "deeplink_index" not in _state:
         raise HTTPException(status_code=503, detail="index still warming up")
-    return run_pipeline(req.query, req.siis_response, _state["deeplink_index"])
+    return await run_pipeline(req.query, req.siis_response, _state["deeplink_index"])
 
 
 @app.get("/v1/cache/stats")
