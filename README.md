@@ -17,13 +17,19 @@ diagnoses the issue, and manually writes out ordered steps — roughly
 ## What this does
 
 Given a complaint (and optionally a reference document), the engine:
-1. Normalizes the complaint into a canonical technical query and generates paraphrases
-2. Extracts a structured, schema-validated troubleshooting plan via LLM
-3. Maps each step to a real in-app deeplink using hybrid (BM25 + dense embedding) retrieval
-4. Orders actions safest-first, destructive/critical actions last
-5. Caches the result — semantically, not by exact string match — so future
-   paraphrases of the same issue are served in single-digit milliseconds
-   instead of re-running the full pipeline
+1. Checks the semantic cache — a paraphrase of an already-answered
+   complaint is served without touching the LLM
+2. Normalizes the complaint into a canonical technical query and generates
+   paraphrases (enrichment) *concurrently* with:
+3. Extracting a structured, schema-validated troubleshooting plan via LLM
+   (extraction)
+4. Maps each step to a real in-app deeplink using hybrid (BM25 + dense
+   embedding) retrieval — and **declines to guess** when no catalog entry is
+   confidently correct, rather than attaching a plausible-looking wrong one
+5. Orders actions safest-first, destructive/critical actions last
+6. Caches the result — semantically, not by exact string match — so future
+   paraphrases of the same issue are served instantly instead of re-running
+   the full pipeline
 
 ## Architecture
 
