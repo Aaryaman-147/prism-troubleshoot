@@ -34,14 +34,14 @@ Given a complaint (and optionally a reference document), the engine:
 ## Architecture
 
 ```
-Complaint ──▶ [Cache Check] ──HIT──▶ return in <300ms
+Complaint ──▶ [Cache Check] ──HIT──▶ return in single-digit ms
                     │ MISS
                     ▼
-             Query Enrichment (normalize + paraphrase)
+     ┌── Query Enrichment ──┐  (run concurrently via asyncio.gather —
+     └── Structure Extraction ┘  independent LLM calls, ~halves cold-path latency)
                     ▼
-             Structure Extraction (LLM → Goal/Action/StepGroup)
-                    ▼
-             Deeplink Mapping (hybrid BM25 + dense retrieval)
+             Deeplink Mapping (hybrid BM25 + dense retrieval,
+                                confidence floor + ambiguity margin)
                     ▼
              Action Ordering (auto → manual → critical)
                     ▼
