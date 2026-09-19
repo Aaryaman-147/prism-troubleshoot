@@ -1,0 +1,204 @@
+{
+  "_README": [
+    "Labeled evaluation set for scripts/ablation.py.",
+    "",
+    "IMPORTANT — READ BEFORE QUOTING ANY NUMBER FROM THIS:",
+    "These labels were authored by hand against the 5-entry PLACEHOLDER",
+    "deeplinks.json, not against Samsung's real ~575-entry catalog. With only",
+    "five candidate screens, several actions have no correct answer and most",
+    "others are trivially separable, so absolute accuracy here is close to",
+    "meaningless. What this set IS good for right now: comparing configurations",
+    "against each other on identical inputs, and catching regressions.",
+    "",
+    "When the real deeplinks.json lands, replace the retrieval cases with",
+    "actions labeled against real deeplink URIs and re-run. The harness needs",
+    "no changes.",
+    "",
+    "expected_deeplink: null means NO catalog entry is correct, so the system",
+    "SHOULD abstain. Those cases are what make the confidence floor and the",
+    "ambiguity margin measurable instead of just asserted."
+  ],
+
+  "retrieval_cases": [
+    {
+      "id": "r01_navigation_type",
+      "actionName": "Navigation Settings",
+      "description": "It will change how you navigate",
+      "steps": ["Open Settings", "Tap Display", "Tap Navigation bar", "Select Buttons"],
+      "expected_deeplink": "bixby://masked/act/display_navigation_bar"
+    },
+    {
+      "id": "r02_gesture_navigation",
+      "actionName": "Gesture Navigation",
+      "description": "It will fix swipe gesture behaviour",
+      "steps": ["Open Settings", "Tap Display", "Tap Navigation bar", "Select Swipe gestures"],
+      "expected_deeplink": "bixby://masked/act/display_navigation_bar"
+    },
+    {
+      "id": "r03_battery_optimization",
+      "actionName": "Battery Optimization",
+      "description": "It will reduce background power drain",
+      "steps": ["Open Settings", "Tap Battery", "Tap Background usage limits"],
+      "expected_deeplink": "bixby://masked/act/battery_optimization"
+    },
+    {
+      "id": "r04_background_app_limits",
+      "actionName": "Background App Limits",
+      "description": "It will stop apps draining power",
+      "steps": ["Open Settings", "Tap Battery", "Tap Background usage limits", "Add app to sleeping apps"],
+      "expected_deeplink": "bixby://masked/act/battery_optimization"
+    },
+    {
+      "id": "r05_display_brightness",
+      "actionName": "Display Brightness",
+      "description": "It will adjust your screen brightness",
+      "steps": ["Open Settings", "Tap Display", "Drag the brightness slider"],
+      "expected_deeplink": "bixby://masked/act/display_brightness"
+    },
+    {
+      "id": "r06_adaptive_brightness",
+      "actionName": "Adaptive Brightness",
+      "description": "It will stop automatic brightness changes",
+      "steps": ["Open Settings", "Tap Display", "Toggle Adaptive brightness off"],
+      "expected_deeplink": "bixby://masked/act/display_brightness"
+    },
+    {
+      "id": "r07_motion_smoothness",
+      "actionName": "Motion Smoothness",
+      "description": "It will stop flicker and save battery",
+      "steps": ["Open Settings", "Tap Display", "Tap Motion smoothness", "Select Standard"],
+      "expected_deeplink": "bixby://masked/act/display_brightness",
+      "_note": "This is the exact action that produced the wrong battery deeplink in the demo. The description mentions battery; the destination is a display screen."
+    },
+    {
+      "id": "r08_camera_reset",
+      "actionName": "Camera Settings",
+      "description": "It will restore camera default settings",
+      "steps": ["Open Camera", "Tap Settings", "Tap Reset settings"],
+      "expected_deeplink": "bixby://masked/act/camera_reset"
+    },
+    {
+      "id": "r09_camera_crash_fix",
+      "actionName": "Camera Reset",
+      "description": "It will fix repeated camera crashes",
+      "steps": ["Open Settings", "Tap Apps", "Tap Camera", "Tap Storage", "Tap Clear data"],
+      "expected_deeplink": "bixby://masked/act/camera_reset"
+    },
+    {
+      "id": "r10_bluetooth_pairing",
+      "actionName": "Bluetooth Pairing",
+      "description": "It will reconnect your paired device",
+      "steps": ["Open Settings", "Tap Connections", "Tap Bluetooth", "Tap the device"],
+      "expected_deeplink": null
+    },
+    {
+      "id": "r11_wifi_reset",
+      "actionName": "Network Settings",
+      "description": "It will reset your network connections",
+      "steps": ["Open Settings", "Tap Connections", "Tap Wi-Fi", "Forget the network"],
+      "expected_deeplink": null
+    },
+    {
+      "id": "r12_sound_volume",
+      "actionName": "Sound Settings",
+      "description": "It will restore your ringtone volume",
+      "steps": ["Open Settings", "Tap Sounds and vibration", "Drag Ringtone slider"],
+      "expected_deeplink": null
+    },
+    {
+      "id": "r13_software_update",
+      "actionName": "Software Update",
+      "description": "It will install the latest firmware",
+      "steps": ["Open Settings", "Tap Software update", "Tap Download and install"],
+      "expected_deeplink": null
+    },
+    {
+      "id": "r14_storage_cleanup",
+      "actionName": "Storage Cleanup",
+      "description": "It will free up device storage",
+      "steps": ["Open Settings", "Tap Battery and device care", "Tap Storage", "Tap Clean now"],
+      "expected_deeplink": null
+    }
+  ],
+
+  "ordering_cases": [
+    {
+      "id": "o01_basic_critical_last",
+      "actions": [
+        {"actionName": "Factory Reset", "category": "critical"},
+        {"actionName": "Display Settings", "category": "auto"},
+        {"actionName": "Clean Charging Port", "category": "manual"}
+      ],
+      "expected_order": ["Display Settings", "Clean Charging Port", "Factory Reset"]
+    },
+    {
+      "id": "o02_already_ordered",
+      "actions": [
+        {"actionName": "Battery Settings", "category": "auto"},
+        {"actionName": "Replace Battery", "category": "manual"},
+        {"actionName": "Wipe Cache Partition", "category": "critical"}
+      ],
+      "expected_order": ["Battery Settings", "Replace Battery", "Wipe Cache Partition"]
+    },
+    {
+      "id": "o03_two_critical",
+      "actions": [
+        {"actionName": "Factory Reset", "category": "critical"},
+        {"actionName": "Wipe Cache Partition", "category": "critical"},
+        {"actionName": "Motion Smoothness", "category": "auto"}
+      ],
+      "expected_order": ["Motion Smoothness", "Factory Reset", "Wipe Cache Partition"]
+    },
+    {
+      "id": "o04_all_auto",
+      "actions": [
+        {"actionName": "Adaptive Brightness", "category": "auto"},
+        {"actionName": "Motion Smoothness", "category": "auto"},
+        {"actionName": "Battery Optimization", "category": "auto"}
+      ],
+      "expected_order": ["Adaptive Brightness", "Motion Smoothness", "Battery Optimization"]
+    },
+    {
+      "id": "o05_reversed_input",
+      "actions": [
+        {"actionName": "Factory Reset", "category": "critical"},
+        {"actionName": "Safe Mode Boot", "category": "manual"},
+        {"actionName": "Gesture Navigation", "category": "auto"}
+      ],
+      "expected_order": ["Gesture Navigation", "Safe Mode Boot", "Factory Reset"]
+    },
+    {
+      "id": "o06_manual_before_critical",
+      "actions": [
+        {"actionName": "Remove Screen Protector", "category": "manual"},
+        {"actionName": "Factory Reset", "category": "critical"},
+        {"actionName": "Touch Sensitivity", "category": "auto"}
+      ],
+      "expected_order": ["Touch Sensitivity", "Remove Screen Protector", "Factory Reset"]
+    },
+    {
+      "id": "o07_single_action",
+      "actions": [
+        {"actionName": "Battery Optimization", "category": "auto"}
+      ],
+      "expected_order": ["Battery Optimization"]
+    },
+    {
+      "id": "o08_five_actions",
+      "actions": [
+        {"actionName": "Wipe Cache Partition", "category": "critical"},
+        {"actionName": "Restart Device", "category": "manual"},
+        {"actionName": "Adaptive Brightness", "category": "auto"},
+        {"actionName": "Factory Reset", "category": "critical"},
+        {"actionName": "Motion Smoothness", "category": "auto"}
+      ],
+      "expected_order": [
+        "Adaptive Brightness",
+        "Motion Smoothness",
+        "Restart Device",
+        "Wipe Cache Partition",
+        "Factory Reset"
+      ]
+    }
+  ]
+}
