@@ -3,7 +3,7 @@ Stage 0: Query Enrichment.
 Normalizes a colloquial complaint into a canonical technical query, and
 generates paraphrases for cache-key robustness and query_variations output.
 """
-from app.core.llm_client import generate_json
+from app.core.llm_client import generate_json, generate_json_async
 
 ENRICHMENT_PROMPT = """You normalize vague customer device complaints into \
 a canonical technical query, and generate paraphrases.
@@ -21,3 +21,10 @@ Return ONLY valid JSON, no markdown fences, no preamble:
 
 def enrich_query(complaint: str) -> dict:
     return generate_json(ENRICHMENT_PROMPT.format(complaint=complaint), max_output_tokens=800)
+
+
+async def enrich_query_async(complaint: str) -> dict:
+    """Async variant — identical prompt and contract to enrich_query()."""
+    return await generate_json_async(
+        ENRICHMENT_PROMPT.format(complaint=complaint), max_output_tokens=800
+    )

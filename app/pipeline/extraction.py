@@ -15,7 +15,7 @@ you WILL get no_match — that's correct behavior, not a bug. Once you have
 the real siis_responses.json (post-registration), pass the matching entry
 in as siis_response.
 """
-from app.core.llm_client import generate_json
+from app.core.llm_client import generate_json, generate_json_async
 
 EXTRACTION_PROMPT = """You are extracting a structured troubleshooting plan \
 from reference support text. Follow the schema EXACTLY.
@@ -65,3 +65,9 @@ Return ONLY valid JSON matching this shape, no markdown fences, no preamble:
 def extract_structure(complaint: str, reference: str = "") -> dict:
     prompt = EXTRACTION_PROMPT.format(complaint=complaint, reference=reference)
     return generate_json(prompt, max_output_tokens=2500)
+
+
+async def extract_structure_async(complaint: str, reference: str = "") -> dict:
+    """Async variant — identical prompt and contract to extract_structure()."""
+    prompt = EXTRACTION_PROMPT.format(complaint=complaint, reference=reference)
+    return await generate_json_async(prompt, max_output_tokens=2500)

@@ -5,28 +5,37 @@ This is what main.py's /v1/troubleshoot endpoint calls.
 
 PERFORMANCE NOTE: enrichment and extraction are independent LLM calls
 (extraction doesn't need enrichment's output) — they run CONCURRENTLY via
-a thread pool below. This alone roughly halves cold-path latency versus
-calling them sequentially, since each Gemini call is the dominant cost.
+asyncio.gather below. This alone roughly halves cold-path latency versus
+calling them sequentially, since each LLM call is the dominant cost.
+
+WHY ASYNC (not the old ThreadPoolExecutor): the two calls were already
+concurrent with threads, but run_pipeline itself was synchronous, so
+FastAPI's event loop was blocked for the entire 5-40s cold call. A second
+client asking for a cached answer couldn't be served in the meantime —
+which directly undermines the sub-300ms fast-path claim under any
+concurrency at all. Now the loop stays free during LLM waits.
+
+Note the remaining sync work here (embedding for the cache lookup, BM25 +
+dense deeplink retrieval) is CPU-bound and runs inline on the event loop.
+That's fine at demo scale — it's single-digit milliseconds — but it is the
+next thing to offload with asyncio.to_thread if you ever load-test this.
 """
+import asyncio
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import ValidationError
 
 from app.cache.semantic_cache import cache
 from app.core.llm_client import LLMRateLimitError
-from app.pipeline.enrichment import enrich_query
-from app.pipeline.extraction import extract_structure
+from app.pipeline.enrichment import enrich_query_async
+from app.pipeline.extraction import extract_structure_async
 from app.pipeline.ordering import resolve_deeplinks, order_actions
 from app.pipeline.deeplink_retrieval import DeeplinkIndex
 from app.models.schema import ContextDeeplinkResponse, ResponseMeta, TroubleshootResponse
 from app.utils.validators import contains_leaked_url, scrub_urls
 from app.core.config import settings
 
-_executor = ThreadPoolExecutor(max_workers=4)
-
-
-def run_pipeline(
+async def run_pipeline(
     query: str,
     siis_response: str | None,
     deeplink_index: DeeplinkIndex,
@@ -53,11 +62,18 @@ def run_pipeline(
 
     # --- Cold path: full pipeline ---
     # Fire enrichment + extraction CONCURRENTLY — they're independent calls.
-    enrichment_future = _executor.submit(enrich_query, query)
-    extraction_future = _executor.submit(extract_structure, query, siis_response or "")
+    # return_exceptions=True so one failing call doesn't cancel the other:
+    # a failed enrichment must NOT throw away a perfectly good extraction.
+    enrichment_result, extraction_result = await asyncio.gather(
+        enrich_query_async(query),
+        extract_structure_async(query, siis_response or ""),
+        return_exceptions=True,
+    )
 
     try:
-        enrichment = enrichment_future.result()
+        if isinstance(enrichment_result, BaseException):
+            raise enrichment_result
+        enrichment = enrichment_result
     except LLMRateLimitError as e:
         print(f"[enrichment RATE LIMITED] query='{query}' error={e}")
         enrichment = {"canonical_query": query, "query_variations": [query]}
@@ -77,7 +93,9 @@ def run_pipeline(
         enrichment = {"canonical_query": query, "query_variations": [query]}
 
     try:
-        raw = extraction_future.result()
+        if isinstance(extraction_result, BaseException):
+            raise extraction_result
+        raw = extraction_result
     except LLMRateLimitError as e:
         print(f"[extraction RATE LIMITED] query='{query}' error={e}")
         raw = {"contexts": [], "fallback": "rate_limited"}
@@ -141,7 +159,14 @@ def run_pipeline(
         if lookup.status == "near_miss":
             cache.merge_into_cluster(lookup.cluster, query)
         else:
-            cache.insert_new_cluster(canonical_query, response)
+            # Seed the centroid from the raw query + canonical form + the
+            # enrichment stage's paraphrases. Without the raw query in here,
+            # even an identical resubmission misses (see insert_new_cluster).
+            cache.insert_new_cluster(
+                canonical_query,
+                response,
+                seed_texts=[query, canonical_query, *variations],
+            )
 
     latency_ms = (time.perf_counter() - t_start) * 1000
     return TroubleshootResponse(
