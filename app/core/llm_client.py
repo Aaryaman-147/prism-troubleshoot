@@ -9,6 +9,7 @@ Switch providers via .env: set LLM_PROVIDER=openrouter or LLM_PROVIDER=gemini.
 Both enrichment.py and extraction.py call generate_json() here — this is
 the one place to touch if you swap providers again.
 """
+import asyncio
 import json
 import re
 import time
@@ -18,6 +19,8 @@ from app.core.config import settings
 _configured = False
 _gemini_model = None
 _openrouter_client = None
+_openrouter_async_client = None
+_async_client_loop = None
 
 
 class LLMRateLimitError(Exception):
@@ -159,3 +162,101 @@ def generate_json(prompt: str, max_output_tokens: int = 1500, max_retries: int =
     if settings.LLM_PROVIDER == "openrouter":
         return _generate_openrouter(prompt, max_output_tokens, max_retries)
     return _generate_gemini(prompt, max_output_tokens, max_retries)
+
+
+# ---------------------------------------------------------------------------
+# Async variants
+# ---------------------------------------------------------------------------
+# Why: the orchestrator fires enrichment + extraction concurrently. Under the
+# old ThreadPoolExecutor that worked, but the FastAPI endpoint still blocked
+# its event loop worker for the whole 5-40s cold call, so the server couldn't
+# serve a sub-300ms cache hit to a second client while one cold call was in
+# flight. Going async fixes that.
+#
+# OpenRouter gets REAL async (AsyncOpenAI -> non-blocking httpx). The Gemini
+# SDK's generate_content is synchronous and blocking, so it gets a thread-pool
+# fallback via asyncio.to_thread — which still frees the event loop, it just
+# costs one worker thread per in-flight call.
+
+
+async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_retries: int) -> dict:
+    from openai import AsyncOpenAI, RateLimitError
+
+    global _openrouter_async_client, _async_client_loop
+
+    # The async client holds an httpx connection pool bound to the event loop
+    # it was created on. Re-using it across loops (pytest creates a fresh loop
+    # per test) raises "Event loop is closed", so rebuild it if the loop changed.
+    current_loop = asyncio.get_running_loop()
+    if _openrouter_async_client is None or _async_client_loop is not current_loop:
+        _openrouter_async_client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=settings.OPENROUTER_API_KEY,
+        )
+        _async_client_loop = current_loop
+
+    last_error = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            resp = await _openrouter_async_client.chat.completions.create(
+                model=settings.OPENROUTER_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_output_tokens,
+                temperature=0.2,
+                response_format={"type": "json_object"},
+            )
+
+            content = resp.choices[0].message.content
+
+            if content is None:
+                finish_reason = resp.choices[0].finish_reason
+                raise ValueError(
+                    f"OpenRouter returned no content. finish_reason={finish_reason}. "
+                    f"Often means max_tokens was hit before generating anything, "
+                    f"or the model/provider had an internal error — try raising "
+                    f"max_output_tokens or switching models."
+                )
+
+            try:
+                return json.loads(_clean_json_text(content))
+            except json.JSONDecodeError:
+                print(f"[JSON PARSE FAILED] model={settings.OPENROUTER_MODEL}")
+                print(f"Raw content (first 500 chars): {content[:500]}")
+                raise
+
+        except RateLimitError as e:
+            last_error = e
+            wait = 10 * (attempt + 1)
+
+            if attempt < max_retries:
+                print(
+                    f"[openrouter rate limited] attempt "
+                    f"{attempt + 1}/{max_retries + 1}, waiting {wait}s"
+                )
+                # asyncio.sleep, NOT time.sleep — blocking here would stall
+                # every other request on the event loop during the backoff.
+                await asyncio.sleep(wait)
+
+            continue
+
+    raise LLMRateLimitError(
+        f"OpenRouter quota exhausted after "
+        f"{max_retries + 1} attempts: {last_error}"
+    )
+
+
+async def generate_json_async(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2) -> dict:
+    """
+    Async counterpart of generate_json(). Same contract, same exceptions
+    (LLMRateLimitError, ValueError, json.JSONDecodeError) — the orchestrator's
+    error handling is unchanged.
+
+    - openrouter -> genuinely non-blocking HTTP
+    - gemini     -> blocking SDK call offloaded to a worker thread
+    """
+    if settings.LLM_PROVIDER == "openrouter":
+        return await _generate_openrouter_async(prompt, max_output_tokens, max_retries)
+    return await asyncio.to_thread(
+        _generate_gemini, prompt, max_output_tokens, max_retries
+    )
