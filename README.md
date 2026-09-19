@@ -148,10 +148,12 @@ by the script itself, and re-run once Samsung's real deeplink catalog is in
 
 ## Status
 
-🚧 Actively in development for the hackathon submission.
-Core pipeline, schema validation, hybrid retrieval, and semantic caching
-are implemented and tested. Real competition dataset integration, ablation
-study, and frontend are in progress.
+Core pipeline, schema validation, hybrid retrieval, semantic caching, async
+concurrency, the frontend, full test suite, and the ablation study are all
+implemented. Outstanding: swap in the real competition dataset
+(`queries.json` / `siis_responses.json` / `deeplinks.json`) once Samsung
+releases it, and re-tune retrieval thresholds against real deeplink
+vocabulary.
 
 ## License
 
