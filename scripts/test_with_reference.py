@@ -23,6 +23,6 @@ resp = httpx.post(
         "query": "screen flickers and the battery dies fast",
         "siis_response": SAMPLES["screen_flicker_battery"],
     },
-    timeout=60,  # was 30 — cold path can take 12-20s+, 30s cuts it close
+    timeout=30,
 )
 print(json.dumps(resp.json(), indent=2))

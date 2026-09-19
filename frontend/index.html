@@ -303,7 +303,7 @@ async function refreshCacheStats() {
         ${stats.clusters.map(c => `
           <div class="text-xs border-t border-slate-100 pt-2">
             <div class="font-medium text-slate-700">${escapeHtml(c.canonical_query)}</div>
-            <div class="text-slate-400 mt-0.5">${c.merged_count} paraphrase${c.merged_count !== 1 ? 's' : ''} matched to this cluster</div>
+            <div class="text-slate-400 mt-0.5">${c.merged_count} quer${c.merged_count !== 1 ? 'ies' : 'y'} served &middot; ${c.merged_count - 1} paraphrase${c.merged_count - 1 !== 1 ? 's' : ''} absorbed</div>
           </div>`).join('')}
       </div>`;
   } catch {
