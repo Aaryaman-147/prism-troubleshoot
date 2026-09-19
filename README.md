@@ -69,6 +69,11 @@ answer; a wrong one silently sends the user to the wrong settings screen
 while looking correct. This is tuned and measured, not just asserted — see
 [Ablation study](#ablation-study) below.
 
+**Fully async pipeline.** Enrichment and extraction are independent LLM
+calls and run concurrently; the FastAPI event loop stays free during a cold
+call's 5–40s LLM wait, so a concurrent request can still be served from
+cache in the meantime instead of queueing behind it.
+
 ## Tech stack
 
 - **API**: FastAPI
