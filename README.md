@@ -34,20 +34,20 @@ Given a complaint (and optionally a reference document), the engine:
 ## Architecture
 
 ```
-Complaint ──▶ [Cache Check] ──HIT──▶ return in single-digit ms
-                    │ MISS
-                    ▼
-     ┌── Query Enrichment ──┐  (run concurrently via asyncio.gather —
-     └── Structure Extraction ┘  independent LLM calls, ~halves cold-path latency)
-                    ▼
-             Deeplink Mapping (hybrid BM25 + dense retrieval,
-                                confidence floor + ambiguity margin)
-                    ▼
-             Action Ordering (auto → manual → critical)
-                    ▼
-             Validation (Pydantic schema + URL-leak scrubbing)
-                    ▼
-             Cache Write (semantic cluster) + Response
+Complaint → [Cache Check] → HIT → return in <300ms
+                │ MISS
+                ▼
+         [0] Query Enrichment (normalize + paraphrase)
+                ▼
+         [1] Structure Extraction (LLM → Goal/Action/StepGroup)
+                ▼
+         [2] Deeplink Mapping (hybrid BM25 + dense retrieval)
+                ▼
+         [3] Action Ordering (auto → manual → critical)
+                ▼
+         [4] Validation (Pydantic + URL scrub + catalog check)
+                ▼
+         [5] Cache Write (semantic cluster) + Response
 ```
 
 ## Differentiators
