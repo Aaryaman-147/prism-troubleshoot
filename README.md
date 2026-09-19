@@ -111,6 +111,41 @@ curl -X POST http://localhost:8000/v1/troubleshoot \
   -d '{"query": "screen flickers and battery dies fast", "siis_response": "<reference text>"}'
 ```
 
+A bare `query` with no `siis_response` correctly returns `no_match` — per
+the spec's "No Hallucinated Steps" rule, there's no source material to
+extract a grounded plan from. That's expected behavior, not a bug.
+
+## Testing
+
+```bash
+pytest tests/ -v
+```
+
+48 tests, fully offline (mocked embeddings, no API keys or network needed):
+schema validation, semantic cache (including thread-safety and the
+fallback-poisoning regression), deeplink matching (confidence floor,
+ambiguity margin, BM25 normalization), action ordering, URL/hallucination
+guards, and async orchestrator integration tests.
+
+## Ablation study
+
+```bash
+python scripts/ablation.py                    # retrieval + rule-based ordering, free & offline
+python scripts/ablation.py --ordering both     # + LLM-based ordering (spends free-tier quota)
+python scripts/ablation.py --detail <case_id>  # per-case top-matches for one retrieval case
+```
+
+Compares hybrid vs. dense-only vs. BM25-only deeplink retrieval, sweeps the
+confidence floor and ambiguity margin, and compares rule-based vs. LLM-based
+action ordering, against a labeled eval set in
+`app/data/ablation_eval.json`. Findings so far: the confidence floor matters
+far more than the fusion weight for eliminating wrong deeplink matches, and
+rule-based ordering matches the labeled order exactly with zero
+critical-last violations, no LLM call required. Note the eval set is
+labeled against the current placeholder catalog — see the warning printed
+by the script itself, and re-run once Samsung's real deeplink catalog is in
+`app/data/`.
+
 ## Status
 
 🚧 Actively in development for the hackathon submission.
