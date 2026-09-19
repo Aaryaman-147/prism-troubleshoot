@@ -76,11 +76,12 @@ cache in the meantime instead of queueing behind it.
 
 ## Tech stack
 
-- **API**: FastAPI
+- **API**: FastAPI (async)
 - **Validation**: Pydantic
 - **Embeddings**: sentence-transformers
 - **Sparse retrieval**: BM25 (rank-bm25)
-- **LLM**: configurable — Gemini or any OpenAI-compatible endpoint (e.g. OpenRouter)
+- **LLM**: configurable — Gemini (native SDK) or any OpenAI-compatible
+  endpoint (e.g. OpenRouter), switchable via `.env` with no code changes
 
 ## Setup
 
