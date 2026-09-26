@@ -8,26 +8,24 @@
 <style>
   @keyframes pulse-bar { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .loading-bar { animation: pulse-bar 1.2s ease-in-out infinite; }
+  input[type=range] { accent-color: #0f172a; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
 
 <div class="max-w-3xl mx-auto px-6 py-10">
 
-  <!-- Header -->
   <div class="mb-8">
     <h1 class="text-2xl font-semibold tracking-tight">Smart Guided Troubleshooting Engine</h1>
     <p class="text-slate-500 mt-1 text-sm">Complaint in, validated fix plan out — with a semantic cache that skips the LLM on repeat issues.</p>
   </div>
 
-  <!-- Input form -->
   <div class="bg-white border border-slate-200 rounded-lg p-5 mb-6">
     <label class="block text-sm font-medium text-slate-700 mb-1.5">Device complaint</label>
     <textarea id="query" rows="2"
       class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-      placeholder="e.g. screen flickers and the battery dies fast"></textarea>
+      placeholder="e.g. screen flickers and the battery dies fast">screen flickers and the battery dies fast</textarea>
 
-    <!-- P1: example complaints so a judge doesn't have to think one up -->
     <div class="flex flex-wrap gap-1.5 mt-2">
       <span class="text-xs text-slate-400 py-1">Try:</span>
       <button class="example-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
@@ -41,16 +39,16 @@
         Swipe gestures wrong
       </button>
       <button class="example-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
-        data-query="my phone got slow after the update"
-        data-reference="Performance slowdown after a system update is often caused by background app re-indexing or cache rebuilding. Open Settings, then Apps, then check Background usage limits, and consider clearing the system cache via Storage settings.">
-        Slow after update
+        data-query="my screen flickers and storage is full"
+        data-reference="Display flickering is commonly caused by a stuck refresh-rate setting — open Settings, then Display, then Motion smoothness, and set it to Standard. Separately, storage running full can be resolved by opening Settings, then Storage, then reviewing and clearing cached app data.">
+        Two distinct issues
       </button>
     </div>
 
     <label class="block text-sm font-medium text-slate-700 mt-4 mb-1.5">Reference text <span class="text-slate-400 font-normal">(optional — leave blank to test cache-only lookup)</span></label>
     <textarea id="siis_response" rows="3"
       class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-      placeholder="Paste internal support/reference documentation here"></textarea>
+      placeholder="Paste internal support/reference documentation here">Display flickering combined with rapid battery drain is commonly caused by adaptive brightness conflicting with a third-party app, or a stuck refresh-rate setting. Open Settings, then Display, then Motion smoothness, and set it to Standard instead of Adaptive.</textarea>
 
     <div class="flex items-center justify-between mt-4">
       <label class="flex items-center gap-2 text-sm text-slate-600">
@@ -65,17 +63,38 @@
     </div>
   </div>
 
-  <!-- P1: guided paraphrase-demo banner, shown after a successful cold call -->
-  <div id="paraphraseHint" class="hidden bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 text-sm text-blue-800">
-    That was a cold call (real LLM run). Try submitting a
-    <button id="tryParaphraseBtn" class="underline font-medium hover:text-blue-900">reworded version of the same complaint</button>
-    now — no reference text needed — to see the cache serve it instantly.
+  <div class="bg-white border border-slate-200 rounded-lg p-5 mb-6">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-slate-700">Retrieval tuning <span class="text-slate-400 font-normal">(live, this request only)</span></h2>
+      <button id="resetTuningBtn" class="text-xs text-slate-400 hover:text-slate-600">reset to defaults</button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div>
+        <div class="flex justify-between text-xs text-slate-600 mb-1">
+          <span>Fusion weight (alpha)</span><span id="alphaVal" class="font-mono">0.50</span>
+        </div>
+        <input type="range" id="alpha" min="0" max="1" step="0.05" value="0.5" class="w-full">
+        <div class="flex justify-between text-[10px] text-slate-400 mt-0.5"><span>BM25-only</span><span>dense-only</span></div>
+      </div>
+      <div>
+        <div class="flex justify-between text-xs text-slate-600 mb-1">
+          <span>Confidence floor</span><span id="minConfVal" class="font-mono">0.00</span>
+        </div>
+        <input type="range" id="minConfidence" min="0" max="1" step="0.05" value="0" class="w-full">
+        <div class="flex justify-between text-[10px] text-slate-400 mt-0.5"><span>always guess</span><span>very strict</span></div>
+      </div>
+      <div>
+        <div class="flex justify-between text-xs text-slate-600 mb-1">
+          <span>Ambiguity margin</span><span id="marginVal" class="font-mono">0.05</span>
+        </div>
+        <input type="range" id="margin" min="0" max="0.3" step="0.01" value="0.05" class="w-full">
+        <div class="flex justify-between text-[10px] text-slate-400 mt-0.5"><span>never abstain</span><span>abstain easily</span></div>
+      </div>
+    </div>
   </div>
 
-  <!-- Result area -->
   <div id="resultArea" class="hidden mb-6"></div>
 
-  <!-- Cache stats panel -->
   <div class="bg-white border border-slate-200 rounded-lg p-5 mb-6">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-sm font-semibold text-slate-700">Semantic cache</h2>
@@ -84,7 +103,6 @@
     <div id="cacheStats" class="text-sm text-slate-500">No data yet — send a query to populate the cache.</div>
   </div>
 
-  <!-- P2: request history, so a demo session's progression is visible at a glance -->
   <div class="bg-white border border-slate-200 rounded-lg p-5">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-sm font-semibold text-slate-700">Session history</h2>
@@ -98,8 +116,6 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let requestHistory = [];
-let lastQuery = null;
-let lastWasColdSuccess = false;
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -111,17 +127,21 @@ function renderLatencyBadge(meta) {
   const isFast = meta.cache_hit;
   const color = isFast ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
   const label = isFast ? 'CACHE HIT' : 'LLM CALL';
+  const tokenInfo = (!isFast && (meta.prompt_tokens || meta.completion_tokens))
+    ? `<span class="text-slate-400">·</span><span class="text-slate-500">${meta.prompt_tokens}+${meta.completion_tokens} tokens</span>`
+    : '';
   return `
-    <div class="flex items-center gap-3 text-xs">
+    <div class="flex items-center gap-3 text-xs flex-wrap">
       <span class="px-2 py-0.5 rounded font-medium ${color}">${label}</span>
       <span class="text-slate-500">${meta.latency_ms.toFixed(1)}ms</span>
       <span class="text-slate-400">·</span>
       <span class="text-slate-500">${escapeHtml(meta.model)}</span>
       ${meta.cache_similarity != null ? `<span class="text-slate-400">·</span><span class="text-slate-500">similarity ${meta.cache_similarity.toFixed(3)}</span>` : ''}
+      ${tokenInfo}
     </div>`;
 }
 
-function renderAction(action) {
+function renderAction(action, ambiguousByName, confidenceByName) {
   const categoryColor = {
     auto: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     manual: 'bg-slate-50 text-slate-600 border-slate-200',
@@ -129,7 +149,36 @@ function renderAction(action) {
   }[action.category] || 'bg-slate-50 text-slate-600 border-slate-200';
 
   const steps = action.stepGroups.flatMap(sg => sg.steps);
-  const deeplink = action.stepGroups.find(sg => sg.actionableDeeplink)?.actionableDeeplink;
+  const stepGroupWithLink = action.stepGroups.find(sg => sg.actionableDeeplink);
+  const deeplink = stepGroupWithLink?.actionableDeeplink;
+  const validation = stepGroupWithLink?.validationDeeplink;
+  const confidence = confidenceByName?.[action.actionName];
+  const ambiguous = ambiguousByName?.[action.actionName];
+
+  let linkBlock;
+  if (ambiguous) {
+    linkBlock = `
+      <div class="text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+        <div class="text-amber-800 font-medium mb-1">Ambiguous — could be any of:</div>
+        ${ambiguous.candidates.map(c => `
+          <div class="text-amber-700 flex justify-between gap-2">
+            <span>${escapeHtml(c.description)}</span>
+            <span class="font-mono text-amber-500">${c.score.toFixed(2)}</span>
+          </div>`).join('')}
+      </div>`;
+  } else if (deeplink) {
+    linkBlock = `
+      <button class="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+        title="${escapeHtml(deeplink.deeplink)}">
+        → ${escapeHtml(deeplink.message || deeplink.description)}
+      </button>
+      <div class="text-[10px] text-slate-400 mt-0.5">
+        matched${confidence != null ? ` · confidence ${confidence.toFixed(2)}` : ''}
+        ${validation ? ` · verifies: ${escapeHtml(validation.key)} ${escapeHtml(validation.condition)} ${escapeHtml(validation.value)}` : ''}
+      </div>`;
+  } else {
+    linkBlock = `<p class="text-xs text-slate-400 italic">No direct settings link for this step</p>`;
+  }
 
   return `
     <div class="border border-slate-200 rounded-md p-4">
@@ -141,40 +190,70 @@ function renderAction(action) {
       <ol class="text-sm space-y-1 mb-3 list-decimal list-inside text-slate-700">
         ${steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
       </ol>
-      ${deeplink ? `
-        <button class="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
-          title="${escapeHtml(deeplink.deeplink)}">
-          → ${escapeHtml(deeplink.message || deeplink.description)}
-        </button>` : `
-        <p class="text-xs text-slate-400 italic">No direct settings link for this step</p>`}
+      ${linkBlock}
+    </div>`;
+}
+
+function renderPlanCard(goal, index, total, ambiguousByName, confidenceByName) {
+  const multiLabel = total > 1
+    ? `<span class="text-[10px] font-medium bg-slate-900 text-white px-1.5 py-0.5 rounded mr-2">ISSUE ${index + 1} OF ${total}</span>`
+    : '';
+  return `
+    <div class="border-t border-slate-100 pt-4 mt-4 first:border-t-0 first:pt-0 first:mt-0">
+      <div class="flex items-center mb-1">
+        ${multiLabel}
+        <h2 class="font-semibold">${escapeHtml(goal.title)}</h2>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">confidence ${(goal.score * 100).toFixed(0)}%</p>
+      <div class="space-y-3">
+        ${goal.actions.map(a => renderAction(a, ambiguousByName, confidenceByName)).join('')}
+      </div>
     </div>`;
 }
 
 function renderResult(data) {
-  const goal = data.response.contexts?.[0];
+  const contexts = data.response.contexts || [];
+  const ambiguousByName = {};
+  (data.ambiguous_matches || []).forEach(m => { ambiguousByName[m.actionName] = m; });
+  const confidenceByName = data.deeplink_confidence || {};
 
-  if (!goal) {
+  if (contexts.length === 0) {
     const reason = data.response.fallback || 'no_match';
+    const explanation = data.response.fallback_reason;
     return `
       <div class="bg-white border border-slate-200 rounded-lg p-5">
         ${renderLatencyBadge(data.meta)}
         <div class="mt-4 flex items-start gap-2 text-sm text-slate-600">
           <span class="text-slate-400">—</span>
-          <span>No troubleshooting plan found (<code class="text-xs bg-slate-100 px-1 rounded">${escapeHtml(reason)}</code>).
-          ${reason === 'no_match' ? 'This usually means no reference text was provided, or the reference text has no viable fix for this complaint.' : 'Check server logs for details.'}</span>
+          <div>
+            <div>No troubleshooting plan found (<code class="text-xs bg-slate-100 px-1 rounded">${escapeHtml(reason)}</code>)</div>
+            ${explanation
+              ? `<div class="mt-1 text-slate-500">${escapeHtml(explanation)}</div>`
+              : `<div class="mt-1 text-slate-500">${reason === 'no_match' ? 'This usually means no reference text was provided, or the reference text has no viable fix for this complaint.' : 'Check server logs for details.'}</div>`}
+          </div>
         </div>
       </div>`;
   }
 
+  const multiIssueBanner = contexts.length > 1 ? `
+    <div class="mb-3 text-xs bg-blue-50 border border-blue-200 text-blue-800 rounded px-2 py-1.5 inline-block">
+      Detected ${contexts.length} distinct issues in this complaint — showing a separate plan for each.
+    </div>` : '';
+
   return `
     <div class="bg-white border border-slate-200 rounded-lg p-5">
       ${renderLatencyBadge(data.meta)}
-      <h2 class="font-semibold mt-3 mb-1">${escapeHtml(goal.title)}</h2>
-      <p class="text-xs text-slate-400 mb-4">confidence ${(goal.score * 100).toFixed(0)}%</p>
-      <div class="space-y-3">
-        ${goal.actions.map(renderAction).join('')}
-      </div>
+      <div class="mt-3">${multiIssueBanner}</div>
+      ${contexts.map((goal, i) => renderPlanCard(goal, i, contexts.length, ambiguousByName, confidenceByName)).join('')}
     </div>`;
+}
+
+function getRetrievalOverrides() {
+  return {
+    alpha: parseFloat($('alpha').value),
+    min_confidence: parseFloat($('minConfidence').value),
+    margin: parseFloat($('margin').value),
+  };
 }
 
 async function submitQuery() {
@@ -186,7 +265,6 @@ async function submitQuery() {
   const btn = $('submitBtn');
   const resultArea = $('resultArea');
 
-  $('paraphraseHint').classList.add('hidden');
   btn.disabled = true;
   btn.textContent = 'Thinking…';
   resultArea.classList.remove('hidden');
@@ -196,7 +274,10 @@ async function submitQuery() {
     </div>`;
 
   try {
-    const body = { query };
+    const body = {
+      query,
+      retrieval_overrides: getRetrievalOverrides(),
+    };
     if (siisResponse) body.siis_response = siisResponse;
 
     const resp = await fetch(`${apiBase}/v1/troubleshoot`, {
@@ -210,7 +291,7 @@ async function submitQuery() {
         <div class="bg-white border border-red-200 rounded-lg p-5 text-sm text-red-600">
           Request failed (HTTP ${resp.status}). Check that the API is running at ${escapeHtml(apiBase)}.
         </div>`;
-      addToHistory(query, null, false);
+      addToHistory(query, null, false, 0);
       return;
     }
 
@@ -218,31 +299,23 @@ async function submitQuery() {
     resultArea.innerHTML = renderResult(data);
     refreshCacheStats();
 
-    const succeeded = data.response.contexts && data.response.contexts.length > 0;
-    addToHistory(query, data.meta, succeeded);
-
-    // P1: guided paraphrase-demo prompt — only makes sense right after a
-    // genuine cold-path success, so the next hit is a meaningful contrast.
-    if (succeeded && !data.meta.cache_hit) {
-      lastQuery = query;
-      lastWasColdSuccess = true;
-      $('paraphraseHint').classList.remove('hidden');
-    }
+    const numIssues = (data.response.contexts || []).length;
+    addToHistory(query, data.meta, numIssues > 0, numIssues);
   } catch (err) {
     resultArea.innerHTML = `
       <div class="bg-white border border-red-200 rounded-lg p-5 text-sm text-red-600">
         Couldn't reach the API at ${escapeHtml(apiBase)}. Is the server running?
       </div>`;
-    addToHistory(query, null, false);
+    addToHistory(query, null, false, 0);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Get troubleshooting plan';
   }
 }
 
-function addToHistory(query, meta, succeeded) {
-  requestHistory.unshift({ query, meta, succeeded, time: new Date() });
-  requestHistory = requestHistory.slice(0, 10); // keep last 10
+function addToHistory(query, meta, succeeded, numIssues) {
+  requestHistory.unshift({ query, meta, succeeded, numIssues, time: new Date() });
+  requestHistory = requestHistory.slice(0, 10);
   renderHistory();
 }
 
@@ -260,11 +333,15 @@ function renderHistory() {
     const cacheTag = h.meta?.cache_hit
       ? '<span class="text-[10px] font-medium text-emerald-600">CACHE</span>'
       : h.meta ? '<span class="text-[10px] font-medium text-amber-600">LLM</span>' : '';
+    const multiTag = h.numIssues > 1
+      ? `<span class="text-[10px] font-medium text-slate-500">${h.numIssues} issues</span>`
+      : '';
     const latency = h.meta ? `${h.meta.latency_ms.toFixed(0)}ms` : '—';
     return `
       <div class="flex items-center gap-2 py-1.5 border-t border-slate-100 first:border-t-0 first:pt-0">
         ${statusDot}
         <span class="flex-1 truncate text-slate-600">${escapeHtml(h.query)}</span>
+        ${multiTag}
         ${cacheTag}
         <span class="text-slate-400 w-16 text-right">${latency}</span>
       </div>`;
@@ -303,13 +380,28 @@ async function refreshCacheStats() {
         ${stats.clusters.map(c => `
           <div class="text-xs border-t border-slate-100 pt-2">
             <div class="font-medium text-slate-700">${escapeHtml(c.canonical_query)}</div>
-            <div class="text-slate-400 mt-0.5">${c.merged_count} quer${c.merged_count !== 1 ? 'ies' : 'y'} served &middot; ${c.merged_count - 1} paraphrase${c.merged_count - 1 !== 1 ? 's' : ''} absorbed</div>
+            <div class="text-slate-400 mt-0.5">${c.merged_count} paraphrase${c.merged_count !== 1 ? 's' : ''} matched to this cluster</div>
           </div>`).join('')}
       </div>`;
   } catch {
     el.innerHTML = '<span class="text-red-500">Could not reach API to load cache stats.</span>';
   }
 }
+
+function updateSliderLabels() {
+  $('alphaVal').textContent = parseFloat($('alpha').value).toFixed(2);
+  $('minConfVal').textContent = parseFloat($('minConfidence').value).toFixed(2);
+  $('marginVal').textContent = parseFloat($('margin').value).toFixed(2);
+}
+['alpha', 'minConfidence', 'margin'].forEach(id => {
+  $(id).addEventListener('input', updateSliderLabels);
+});
+$('resetTuningBtn').addEventListener('click', () => {
+  $('alpha').value = 0.5;
+  $('minConfidence').value = 0;
+  $('margin').value = 0.05;
+  updateSliderLabels();
+});
 
 $('submitBtn').addEventListener('click', submitQuery);
 $('refreshCacheBtn').addEventListener('click', refreshCacheStats);
@@ -318,24 +410,11 @@ $('query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.metaKey) submitQuery();
 });
 
-// P1: example-complaint buttons populate the form instantly
 document.querySelectorAll('.example-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     $('query').value = btn.dataset.query;
     $('siis_response').value = btn.dataset.reference;
-    $('paraphraseHint').classList.add('hidden');
   });
-});
-
-// P1: clicking the paraphrase prompt clears the reference text (proving
-// the cache — not a re-supplied reference — is what answers it) and
-// focuses the query box so the user can type a reworded version.
-$('tryParaphraseBtn').addEventListener('click', () => {
-  $('siis_response').value = '';
-  $('query').value = '';
-  $('query').placeholder = `Try rewording: "${lastQuery}"`;
-  $('query').focus();
-  $('paraphraseHint').classList.add('hidden');
 });
 
 refreshCacheStats();
