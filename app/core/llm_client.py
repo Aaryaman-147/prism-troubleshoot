@@ -1,18 +1,19 @@
 """
 Shared LLM client. Supports two providers behind one interface:
-  - Gemini (native SDK) — your original setup
-  - OpenRouter (OpenAI-compatible endpoint) — higher free-tier RPM (20/min
+  - Gemini (native SDK) - your original setup
+  - OpenRouter (OpenAI-compatible endpoint) - higher free-tier RPM (20/min
     vs Gemini's 5/min), useful for testing volume without hitting quota
     walls constantly.
 
 Switch providers via .env: set LLM_PROVIDER=openrouter or LLM_PROVIDER=gemini.
-Both enrichment.py and extraction.py call generate_json() here — this is
-the one place to touch if you swap providers again.
+Both enrichment.py and extraction.py call generate_json()/generate_json_async()
+here - this is the one place to touch if you swap providers again.
 """
 import asyncio
 import json
 import re
 import time
+from dataclasses import dataclass
 
 from app.core.config import settings
 
@@ -23,8 +24,20 @@ _openrouter_async_client = None
 _async_client_loop = None
 
 
+@dataclass
+class TokenUsage:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+    def estimated_cost_usd(self, rate_per_1k_tokens: float = 0.0) -> float:
+        return (self.total_tokens / 1000) * rate_per_1k_tokens
+
+
 class LLMRateLimitError(Exception):
-    """Raised when the provider's quota is exhausted, after retries."""
     pass
 
 
@@ -36,10 +49,38 @@ def _extract_retry_seconds(exc: Exception, default: int = 15) -> int:
 
 
 def _clean_json_text(text: str) -> str:
-    return re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+
+    start = text.find("{")
+    if start == -1:
+        return text
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+
+    return text[start:]
 
 
-def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> dict:
+def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> tuple[dict, TokenUsage]:
     import google.generativeai as genai
     from google.api_core.exceptions import ResourceExhausted
 
@@ -51,22 +92,17 @@ def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> d
         _gemini_model = genai.GenerativeModel(settings.LLM_MODEL)
 
     last_error = None
+    last_error_was_transient_parse_failure = False
     for attempt in range(max_retries + 1):
         try:
             resp = _gemini_model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
                     max_output_tokens=max_output_tokens,
-                    temperature=0.2,
+                    temperature=settings.LLM_TEMPERATURE,
                     response_mime_type="application/json",
                 ),
             )
-            # resp.text can be None (not raise!) when Gemini blocks the
-            # response (safety filters) or stops early with no content
-            # part — e.g. finish_reason=SAFETY or MAX_TOKENS with nothing
-            # generated yet. This was previously crashing with a confusing
-            # 'NoneType is not subscriptable' TypeError deep inside
-            # str.strip(). Check explicitly and surface the real reason.
             if not resp.candidates or resp.text is None:
                 finish_reason = None
                 safety_ratings = None
@@ -78,9 +114,21 @@ def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> d
                     f"safety_ratings={safety_ratings}. This usually means the "
                     f"prompt/response hit a safety filter, or max_output_tokens "
                     f"({max_output_tokens}) was hit before any content was "
-                    f"generated — try raising it."
+                    f"generated - try raising it."
                 )
-            return json.loads(_clean_json_text(resp.text))
+            try:
+                parsed = json.loads(_clean_json_text(resp.text))
+            except json.JSONDecodeError:
+                print(f"[JSON PARSE FAILED] model={settings.LLM_MODEL}")
+                print(f"Raw content (first 500 chars): {resp.text[:500]}")
+                raise
+            usage = TokenUsage()
+            if hasattr(resp, "usage_metadata") and resp.usage_metadata:
+                usage = TokenUsage(
+                    prompt_tokens=getattr(resp.usage_metadata, "prompt_token_count", 0) or 0,
+                    completion_tokens=getattr(resp.usage_metadata, "candidates_token_count", 0) or 0,
+                )
+            return parsed, usage
         except ResourceExhausted as e:
             last_error = e
             retry_delay = min(_extract_retry_seconds(e), 60)
@@ -89,10 +137,26 @@ def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> d
                       f"waiting {retry_delay}s")
                 time.sleep(retry_delay)
             continue
+        except json.JSONDecodeError as e:
+            last_error = e
+            last_error_was_transient_parse_failure = True
+            if attempt < max_retries:
+                wait = 3 * (attempt + 1)
+                print(f"[gemini malformed JSON] attempt {attempt + 1}/{max_retries + 1}, "
+                      f"retrying in {wait}s")
+                time.sleep(wait)
+            continue
+
+    if last_error_was_transient_parse_failure:
+        raise json.JSONDecodeError(
+            f"Gemini returned malformed JSON {max_retries + 1} times in a row: "
+            f"{last_error}",
+            "", 0,
+        )
     raise LLMRateLimitError(f"Gemini quota exhausted after {max_retries + 1} attempts: {last_error}")
 
 
-def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) -> dict:
+def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) -> tuple[dict, TokenUsage]:
     from openai import OpenAI, RateLimitError
 
     global _openrouter_client
@@ -104,6 +168,7 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
         )
 
     last_error = None
+    last_error_was_empty_response = False
 
     for attempt in range(max_retries + 1):
         try:
@@ -111,9 +176,17 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
                 model=settings.OPENROUTER_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_output_tokens,
-                temperature=0.2,
+                temperature=settings.LLM_TEMPERATURE,
                 response_format={"type": "json_object"},
             )
+
+            if not resp.choices:
+                raise ValueError(
+                    f"OpenRouter returned no choices at all (resp.choices="
+                    f"{resp.choices!r}). Usually an upstream provider error "
+                    f"or moderation flag that didn't surface as an HTTP "
+                    f"error - try again or switch models."
+                )
 
             content = resp.choices[0].message.content
 
@@ -122,12 +195,19 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
                 raise ValueError(
                     f"OpenRouter returned no content. finish_reason={finish_reason}. "
                     f"Often means max_tokens was hit before generating anything, "
-                    f"or the model/provider had an internal error — try raising "
+                    f"or the model/provider had an internal error - try raising "
                     f"max_output_tokens or switching models."
                 )
 
+            usage = TokenUsage()
+            if resp.usage:
+                usage = TokenUsage(
+                    prompt_tokens=resp.usage.prompt_tokens or 0,
+                    completion_tokens=resp.usage.completion_tokens or 0,
+                )
+
             try:
-                return json.loads(_clean_json_text(content))
+                return json.loads(_clean_json_text(content)), usage
             except json.JSONDecodeError as e:
                 print(f"[JSON PARSE FAILED] model={settings.OPENROUTER_MODEL}")
                 print(f"Raw content (first 500 chars): {content[:500]}")
@@ -136,57 +216,52 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
         except RateLimitError as e:
             last_error = e
             wait = 10 * (attempt + 1)
-
             if attempt < max_retries:
-                print(
-                    f"[openrouter rate limited] attempt "
-                    f"{attempt + 1}/{max_retries + 1}, "
-                    f"waiting {wait}s"
-                )
+                print(f"[openrouter rate limited] attempt {attempt + 1}/{max_retries + 1}, waiting {wait}s")
                 time.sleep(wait)
-
             continue
 
+        except json.JSONDecodeError as e:
+            last_error = e
+            last_error_was_empty_response = True
+            wait = 3 * (attempt + 1)
+            if attempt < max_retries:
+                print(f"[openrouter malformed JSON] attempt {attempt + 1}/{max_retries + 1}, retrying in {wait}s")
+                time.sleep(wait)
+            continue
+
+        except ValueError as e:
+            if "OpenRouter returned no" not in str(e):
+                raise
+            last_error = e
+            last_error_was_empty_response = True
+            wait = 5 * (attempt + 1)
+            if attempt < max_retries:
+                print(f"[openrouter empty response] attempt {attempt + 1}/{max_retries + 1}, waiting {wait}s")
+                time.sleep(wait)
+            continue
+
+    if last_error_was_empty_response:
+        raise ValueError(
+            f"OpenRouter returned an empty/malformed response "
+            f"{max_retries + 1} times in a row: {last_error}"
+        )
     raise LLMRateLimitError(
         f"OpenRouter quota exhausted after "
         f"{max_retries + 1} attempts: {last_error}"
     )
 
-def generate_json(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2) -> dict:
-    """
-    Calls the configured provider (see LLM_PROVIDER in .env), strips any
-    markdown code-fence wrapping, and parses JSON. Retries on rate limits
-    with backoff. Raises LLMRateLimitError if still limited after retries,
-    json.JSONDecodeError if output genuinely isn't valid JSON.
-    """
+def generate_json(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2) -> tuple[dict, TokenUsage]:
     if settings.LLM_PROVIDER == "openrouter":
         return _generate_openrouter(prompt, max_output_tokens, max_retries)
     return _generate_gemini(prompt, max_output_tokens, max_retries)
 
 
-# ---------------------------------------------------------------------------
-# Async variants
-# ---------------------------------------------------------------------------
-# Why: the orchestrator fires enrichment + extraction concurrently. Under the
-# old ThreadPoolExecutor that worked, but the FastAPI endpoint still blocked
-# its event loop worker for the whole 5-40s cold call, so the server couldn't
-# serve a sub-300ms cache hit to a second client while one cold call was in
-# flight. Going async fixes that.
-#
-# OpenRouter gets REAL async (AsyncOpenAI -> non-blocking httpx). The Gemini
-# SDK's generate_content is synchronous and blocking, so it gets a thread-pool
-# fallback via asyncio.to_thread — which still frees the event loop, it just
-# costs one worker thread per in-flight call.
-
-
-async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_retries: int) -> dict:
+async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_retries: int) -> tuple[dict, TokenUsage]:
     from openai import AsyncOpenAI, RateLimitError
 
     global _openrouter_async_client, _async_client_loop
 
-    # The async client holds an httpx connection pool bound to the event loop
-    # it was created on. Re-using it across loops (pytest creates a fresh loop
-    # per test) raises "Event loop is closed", so rebuild it if the loop changed.
     current_loop = asyncio.get_running_loop()
     if _openrouter_async_client is None or _async_client_loop is not current_loop:
         _openrouter_async_client = AsyncOpenAI(
@@ -196,6 +271,7 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
         _async_client_loop = current_loop
 
     last_error = None
+    last_error_was_empty_response = False
 
     for attempt in range(max_retries + 1):
         try:
@@ -203,9 +279,17 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
                 model=settings.OPENROUTER_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_output_tokens,
-                temperature=0.2,
+                temperature=settings.LLM_TEMPERATURE,
                 response_format={"type": "json_object"},
             )
+
+            if not resp.choices:
+                raise ValueError(
+                    f"OpenRouter returned no choices at all (resp.choices="
+                    f"{resp.choices!r}). Usually an upstream provider error "
+                    f"or moderation flag that didn't surface as an HTTP "
+                    f"error - try again or switch models."
+                )
 
             content = resp.choices[0].message.content
 
@@ -214,12 +298,19 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
                 raise ValueError(
                     f"OpenRouter returned no content. finish_reason={finish_reason}. "
                     f"Often means max_tokens was hit before generating anything, "
-                    f"or the model/provider had an internal error — try raising "
+                    f"or the model/provider had an internal error - try raising "
                     f"max_output_tokens or switching models."
                 )
 
+            usage = TokenUsage()
+            if resp.usage:
+                usage = TokenUsage(
+                    prompt_tokens=resp.usage.prompt_tokens or 0,
+                    completion_tokens=resp.usage.completion_tokens or 0,
+                )
+
             try:
-                return json.loads(_clean_json_text(content))
+                return json.loads(_clean_json_text(content)), usage
             except json.JSONDecodeError:
                 print(f"[JSON PARSE FAILED] model={settings.OPENROUTER_MODEL}")
                 print(f"Raw content (first 500 chars): {content[:500]}")
@@ -228,33 +319,43 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
         except RateLimitError as e:
             last_error = e
             wait = 10 * (attempt + 1)
-
             if attempt < max_retries:
-                print(
-                    f"[openrouter rate limited] attempt "
-                    f"{attempt + 1}/{max_retries + 1}, waiting {wait}s"
-                )
-                # asyncio.sleep, NOT time.sleep — blocking here would stall
-                # every other request on the event loop during the backoff.
+                print(f"[openrouter rate limited] attempt {attempt + 1}/{max_retries + 1}, waiting {wait}s")
                 await asyncio.sleep(wait)
-
             continue
 
+        except json.JSONDecodeError as e:
+            last_error = e
+            last_error_was_empty_response = True
+            wait = 3 * (attempt + 1)
+            if attempt < max_retries:
+                print(f"[openrouter malformed JSON] attempt {attempt + 1}/{max_retries + 1}, retrying in {wait}s")
+                await asyncio.sleep(wait)
+            continue
+
+        except ValueError as e:
+            if "OpenRouter returned no" not in str(e):
+                raise
+            last_error = e
+            last_error_was_empty_response = True
+            wait = 5 * (attempt + 1)
+            if attempt < max_retries:
+                print(f"[openrouter empty response] attempt {attempt + 1}/{max_retries + 1}, waiting {wait}s")
+                await asyncio.sleep(wait)
+            continue
+
+    if last_error_was_empty_response:
+        raise ValueError(
+            f"OpenRouter returned an empty/malformed response "
+            f"{max_retries + 1} times in a row: {last_error}"
+        )
     raise LLMRateLimitError(
         f"OpenRouter quota exhausted after "
         f"{max_retries + 1} attempts: {last_error}"
     )
 
 
-async def generate_json_async(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2) -> dict:
-    """
-    Async counterpart of generate_json(). Same contract, same exceptions
-    (LLMRateLimitError, ValueError, json.JSONDecodeError) — the orchestrator's
-    error handling is unchanged.
-
-    - openrouter -> genuinely non-blocking HTTP
-    - gemini     -> blocking SDK call offloaded to a worker thread
-    """
+async def generate_json_async(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2) -> tuple[dict, TokenUsage]:
     if settings.LLM_PROVIDER == "openrouter":
         return await _generate_openrouter_async(prompt, max_output_tokens, max_retries)
     return await asyncio.to_thread(
