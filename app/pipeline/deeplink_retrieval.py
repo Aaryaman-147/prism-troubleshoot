@@ -113,7 +113,16 @@ class DeeplinkIndex:
         k = self.bm25_saturation_k
         return scores / (scores + k)
 
-    def search(self, query: str, top_k: int = 5) -> list[tuple[DeeplinkEntry, float]]:
+    def search(
+        self, query: str, top_k: int = 5, alpha: float | None = None
+    ) -> list[tuple[DeeplinkEntry, float]]:
+        """
+        alpha: per-call override of the fusion weight. Cheap — BM25 and the
+        dense matrix are already built at startup, so overriding alpha per
+        request (e.g. from a live demo slider) needs no index rebuild.
+        """
+        fusion_alpha = self.alpha if alpha is None else alpha
+
         # Sparse scores
         bm25_scores = self._normalize_bm25(
             np.array(self._bm25.get_scores(query.lower().split()))
@@ -123,7 +132,7 @@ class DeeplinkIndex:
         q_vec = embed(query)
         dense_scores = self._dense_matrix @ q_vec  # cosine, since normalized
 
-        fused = self.alpha * dense_scores + (1 - self.alpha) * bm25_scores
+        fused = fusion_alpha * dense_scores + (1 - fusion_alpha) * bm25_scores
 
         top_idx = np.argsort(-fused)[:top_k]
         return [(self.entries[i], float(fused[i])) for i in top_idx]
