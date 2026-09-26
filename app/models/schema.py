@@ -106,11 +106,40 @@ class ContextDeeplinkResponse(BaseModel):
     """RAG response containing a list of Goal objects."""
     contexts: List[Goal] = []
     fallback: Optional[str] = None
+    # Human-readable explanation of WHY the system abstained, when
+    # fallback is set — directly implements Samsung's "design explicit
+    # abstention behavior" guidance from the Theme-2 meeting. A bare
+    # fallback code ("siis_mismatch", "no_match") tells a developer what
+    # happened but not why; this is meant for a judge/demo audience who
+    # shouldn't need to know the internal fallback vocabulary to
+    # understand the system just made a considered decision, not failed
+    # silently. Left as None when fallback is None (normal success).
+    fallback_reason: Optional[str] = None
+
+
+class RetrievalOverrides(BaseModel):
+    """
+    Optional per-request overrides for deeplink retrieval tuning — lets the
+    frontend expose live sliders (dense/sparse fusion weight, confidence
+    floor, ambiguity margin) so a judge can watch a wrong-deeplink match
+    reappear and disappear in real time, rather than only seeing a static
+    ablation table. Wrapper-level only: never touches the schema fields
+    that mirror the spec's own Appendix A, so this can't affect grading of
+    response shape.
+
+    All optional and unvalidated-range on purpose — an out-of-[0,1] value
+    just produces a degenerate but harmless fusion/threshold, useful for
+    demoing the extremes live rather than being rejected.
+    """
+    alpha: Optional[float] = None
+    min_confidence: Optional[float] = None
+    margin: Optional[float] = None
 
 
 class TroubleshootRequest(BaseModel):
     query: str
     siis_response: Optional[str] = None
+    retrieval_overrides: Optional[RetrievalOverrides] = None
 
 
 class ResponseMeta(BaseModel):
@@ -118,7 +147,30 @@ class ResponseMeta(BaseModel):
     cache_hit: bool
     model: str
     cost_usd: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
     cache_similarity: Optional[float] = None
+
+
+class DeeplinkCandidate(BaseModel):
+    """One candidate screen for an ambiguous or resolved deeplink match —
+    wrapper-level explainability data, not part of the spec's Appendix A
+    schema. `score` is the fused retrieval score, [0, 1]."""
+    deeplink: str
+    description: str
+    score: float
+
+
+class AmbiguousMatch(BaseModel):
+    """
+    An action where retrieval found two (or more) catalog entries close
+    enough in score that picking either would be an arbitrary guess — the
+    ambiguity margin abstained rather than silently choosing one. Surfaced
+    here instead of discarded so the caller (or a human) can disambiguate,
+    turning a silent gap into an actual "did you mean X or Y?" moment.
+    """
+    actionName: str
+    candidates: List[DeeplinkCandidate]
 
 
 class TroubleshootResponse(BaseModel):
@@ -126,3 +178,10 @@ class TroubleshootResponse(BaseModel):
     query_variations: List[str] = []
     response: ContextDeeplinkResponse
     meta: ResponseMeta
+    # Wrapper-level explainability/interaction fields — deliberately outside
+    # `response` (the spec-mirrored object) so they can never affect schema
+    # conformance grading, only demo/debug value.
+    ambiguous_matches: List[AmbiguousMatch] = []
+    deeplink_confidence: Dict[str, float] = {}
+    is_multi_issue: bool = False
+    detected_sub_issues: List[str] = []
