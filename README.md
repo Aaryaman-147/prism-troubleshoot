@@ -1,8 +1,8 @@
 # Smart Guided Troubleshooting Engine
 
 Transforms vague, natural-language device complaints into validated,
-deeplinked, one-tap troubleshooting plans — with a semantic cache that
-serves paraphrased repeat queries in under 300ms.
+deeplinked, one-tap troubleshooting plans — favoring an honest "I don't
+know" over a confident wrong answer.
 
 Built for the **Samsung PRISM GenAI Hackathon 2026 (3rd Edition)** — Theme 02.
 
@@ -19,15 +19,20 @@ diagnoses the issue, and manually writes out ordered steps — roughly
 Given a complaint (and optionally a reference document), the engine:
 1. Checks the semantic cache — a paraphrase of an already-answered
    complaint is served without touching the LLM
-2. Normalizes the complaint into a canonical technical query and generates
+2. Verifies the reference text actually addresses the complaint (SIIS
+   relevance check) — abstains immediately, before any LLM call, if the
+   reference is clearly about a different issue
+3. Normalizes the complaint into a canonical technical query and generates
    paraphrases (enrichment) *concurrently* with:
-3. Extracting a structured, schema-validated troubleshooting plan via LLM
-   (extraction)
-4. Maps each step to a real in-app deeplink using hybrid (BM25 + dense
+4. Extracting one or more structured, schema-validated troubleshooting
+   plans via LLM (extraction) — a complaint describing two distinct issues
+   (e.g. "screen flickers *and* battery dies fast") produces two separate
+   plans, not one merged, under-specified one
+5. Maps each step to a real in-app deeplink using hybrid (BM25 + dense
    embedding) retrieval — and **declines to guess** when no catalog entry is
    confidently correct, rather than attaching a plausible-looking wrong one
-5. Orders actions safest-first, destructive/critical actions last
-6. Caches the result — semantically, not by exact string match — so future
+6. Orders actions safest-first, destructive/critical actions last
+7. Caches the result — semantically, not by exact string match — so future
    paraphrases of the same issue are served instantly instead of re-running
    the full pipeline
 
@@ -37,12 +42,19 @@ Given a complaint (and optionally a reference document), the engine:
 Complaint ──▶ [Cache Check] ──HIT──▶ return in single-digit ms
                     │ MISS
                     ▼
+          [SIIS Relevance Check] ──MISMATCH──▶ abstain (siis_mismatch),
+                    │                          no LLM call spent
+                    │ relevant
+                    ▼
      ┌── Query Enrichment ──┐  (run concurrently via asyncio.gather —
      └── Structure Extraction ┘  independent LLM calls, ~halves cold-path latency)
                     ▼
+     [Multi-Issue Follow-up]  (only fires if enrichment detects 2+ issues
+                                AND the first extraction under-delivered —
+                                never on the common single-issue path)
+                    ▼
              Deeplink Mapping (hybrid BM25 + dense retrieval,
                                 confidence floor + ambiguity margin)
-
                     ▼
              Action Ordering (auto → manual → critical)
                     ▼
@@ -53,26 +65,33 @@ Complaint ──▶ [Cache Check] ──HIT──▶ return in single-digit ms
 
 ## Differentiators
 
-**Semantic cache clustering.** Most naive caching relies on exact-string
-keys, which miss on paraphrased repeat queries and either tank the hit rate
-or fragment into near-duplicate entries. This cache instead clusters queries
-by embedding similarity: a query is scored against every phrasing already
-stored in a cluster (not just an averaged centroid), so an exact repeat and
-a genuine paraphrase both resolve correctly. A failed/fallback response is
-never cached, so a transient extraction failure can't get permanently
-"frozen" as the answer for that issue. Thread-safe under concurrent
-requests.
+**Honest abstention over confident guessing.** This is the core design
+principle, not a fallback of last resort. Two independent gates enforce
+it: (1) a SIIS relevance check rejects a complaint/reference pair whose
+embeddings don't actually align — before spending an LLM call trying to
+force a connection that isn't there; (2) deeplink matching runs against a
+minimum-confidence floor and an ambiguity margin (reject the top match if
+a close second is nearly as good). A missing deeplink or a `null` result
+is an honest answer; a wrong one silently sends the user to the wrong
+settings screen while looking correct. This is tuned and measured, not
+just asserted — see [Ablation study](#ablation-study) below.
 
-**Honest abstention over confident guessing.** Deeplink matching runs
-against a minimum-confidence floor and an ambiguity margin (reject the top
-match if a close second is nearly as good). A missing deeplink is an honest
-answer; a wrong one silently sends the user to the wrong settings screen
-while looking correct. This is tuned and measured, not just asserted — see
-[Ablation study](#ablation-study) below.
+**Multi-issue complaint handling.** A single sentence often bundles two
+unrelated problems. The system detects this and returns a separate,
+independently-scored plan per issue instead of merging them into one
+under-specified answer or silently addressing only the first.
+
+**Semantic cache clustering.** Naive caching relies on exact-string keys,
+which miss on paraphrased repeat queries and either tank the hit rate or
+fragment into near-duplicate entries. This cache instead scores a query
+against every phrasing already stored in a cluster (not just an averaged
+centroid), so an exact repeat and a genuine paraphrase both resolve
+correctly. A failed/fallback response is never cached. Thread-safe under
+concurrent requests.
 
 **Fully async pipeline.** Enrichment and extraction are independent LLM
-calls and run concurrently; the FastAPI event loop stays free during a cold
-call's 5–40s LLM wait, so a concurrent request can still be served from
+calls and run concurrently; the FastAPI event loop stays free during a
+cold call's LLM wait, so a concurrent request can still be served from
 cache in the meantime instead of queueing behind it.
 
 ## Tech stack
@@ -114,7 +133,18 @@ curl -X POST http://localhost:8000/v1/troubleshoot \
 
 A bare `query` with no `siis_response` correctly returns `no_match` — per
 the spec's "No Hallucinated Steps" rule, there's no source material to
-extract a grounded plan from. That's expected behavior, not a bug.
+extract a grounded plan from. A `query` paired with a genuinely unrelated
+`siis_response` correctly returns `siis_mismatch` before any LLM call is
+made. Both are expected, designed behavior — not bugs.
+
+## Frontend
+
+A single self-contained `frontend/index.html` (Tailwind v4 via CDN, no
+build step) — open it directly in a browser. Shows the rendered plan(s)
+(one card per detected issue), live cache-hit/latency/token stats, ambiguous
+deeplink candidates when the system abstains, and live sliders for the
+retrieval confidence floor, ambiguity margin, and BM25/dense fusion weight
+so the abstention behavior can be demonstrated interactively.
 
 ## Testing
 
@@ -122,11 +152,13 @@ extract a grounded plan from. That's expected behavior, not a bug.
 pytest tests/ -v
 ```
 
-48 tests, fully offline (mocked embeddings, no API keys or network needed):
-schema validation, semantic cache (including thread-safety and the
-fallback-poisoning regression), deeplink matching (confidence floor,
-ambiguity margin, BM25 normalization), action ordering, URL/hallucination
-guards, and async orchestrator integration tests.
+125 tests, fully offline (mocked embeddings, no API keys or network
+needed): schema validation, semantic cache (including thread-safety and
+the fallback-poisoning regression), deeplink matching (confidence floor,
+ambiguity margin, BM25 normalization), SIIS relevance verification,
+multi-issue follow-up logic, action ordering, URL/hallucination guards,
+the real HTTP contract (malformed input handling via FastAPI's
+TestClient), and async orchestrator integration tests.
 
 ## Ablation study
 
@@ -149,12 +181,14 @@ by the script itself, and re-run once Samsung's real deeplink catalog is in
 
 ## Status
 
-Core pipeline, schema validation, hybrid retrieval, semantic caching, async
+Core pipeline, schema validation, hybrid retrieval with confidence gating,
+SIIS relevance verification, multi-issue handling, semantic caching, async
 concurrency, the frontend, full test suite, and the ablation study are all
 implemented. Outstanding: swap in the real competition dataset
 (`queries.json` / `siis_responses.json` / `deeplinks.json`) once Samsung
-releases it, and re-tune retrieval thresholds against real deeplink
-vocabulary.
+releases it, and re-tune deeplink confidence thresholds against the real
+~578-entry catalog (the SIIS relevance threshold has already been validated
+independently of the catalog).
 
 ## License
 
