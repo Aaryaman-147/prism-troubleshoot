@@ -17,7 +17,7 @@ import pytest
 from unittest.mock import patch
 
 from app.cache.semantic_cache import SemanticCache
-from app.core.llm_client import LLMRateLimitError
+from app.core.llm_client import LLMRateLimitError, TokenUsage
 from app.models.schema import ContextDeeplinkResponse
 from app.pipeline import orchestrator
 
@@ -44,11 +44,11 @@ class FakeDeeplinkIndex:
     def __init__(self):
         self.catalog_by_uri = {}
 
-    def search(self, query_text, top_k=1):
+    def search(self, query_text, top_k=1, alpha=None):
         return []
 
 
-VALID_EXTRACTION = {
+VALID_EXTRACTION = ({
     "contexts": [
         {
             "goal": "Follow these steps to perform this Display Troubleshooting",
@@ -70,19 +70,39 @@ VALID_EXTRACTION = {
             ],
         }
     ]
-}
+}, TokenUsage(prompt_tokens=120, completion_tokens=340))
 
-VALID_ENRICHMENT = {
+VALID_ENRICHMENT = ({
     "canonical_query": "screen flicker display glitch",
     "query_variations": ["screen keeps flickering", "display glitching"],
-}
+}, TokenUsage(prompt_tokens=40, completion_tokens=60))
 
 
 @pytest.fixture
 def fresh_cache():
     """Swap the module-level singleton for a clean instance per test, so
-    tests can't leak cached clusters into each other."""
-    with patch("app.cache.semantic_cache.embed", side_effect=fake_embed):
+    tests can't leak cached clusters into each other.
+
+    Also bypasses the SIIS relevance-verification gate added to
+    run_pipeline (via app.pipeline.relevance.verify_relevance) for the
+    WHOLE test body. That gate now runs unconditionally, before this
+    file's mocked enrichment/extraction calls ever get a chance to run —
+    and this file's existing fixtures use generic placeholder text like
+    "reference text here" that shares no real vocabulary with the query
+    under a keyword-based fake embedding, so it would always (correctly,
+    but unhelpfully) fail the real check. These tests exist to test OTHER
+    behavior (caching, concurrency, error handling) and were written
+    before relevance-checking existed — rather than rewrite every
+    fixture's reference text to be topically convincing, bypass the gate
+    here so it always reports relevant. The gate itself has its own
+    dedicated, real tests in test_relevance.py."""
+    from app.pipeline.relevance import RelevanceResult
+
+    with patch("app.cache.semantic_cache.embed", side_effect=fake_embed), \
+         patch.object(
+             orchestrator, "verify_relevance",
+             return_value=RelevanceResult(is_relevant=True, similarity=1.0, reason="bypassed_for_test"),
+         ):
         c = SemanticCache(hit_threshold=0.85, near_miss_threshold=0.5)
         with patch.object(orchestrator, "cache", c):
             yield c
@@ -106,7 +126,7 @@ async def test_cold_path_returns_validated_ordered_plan_and_caches_it(fresh_cach
     # Ordering contract: destructive actions must come last.
     categories = [a.category.value for a in result.response.contexts[0].actions]
     assert categories == ["auto", "critical"]
-    assert result.query_variations == VALID_ENRICHMENT["query_variations"]
+    assert result.query_variations == VALID_ENRICHMENT[0]["query_variations"]
     assert fresh_cache.stats()["num_clusters"] == 1
 
 
@@ -118,7 +138,7 @@ async def test_paraphrase_hits_cache_without_calling_the_llm(fresh_cache):
     with patch("app.cache.semantic_cache.embed", side_effect=fake_embed):
         fresh_cache.insert_new_cluster(
             "screen flicker display glitch",
-            ContextDeeplinkResponse(**VALID_EXTRACTION),
+            ContextDeeplinkResponse(**VALID_EXTRACTION[0]),
         )
 
     with patch("app.cache.semantic_cache.embed", side_effect=fake_embed), \
@@ -178,6 +198,39 @@ async def test_rate_limited_extraction_returns_fallback_and_is_never_cached(fres
     assert result.response.fallback == "rate_limited"
     assert result.response.contexts == []
     assert fresh_cache.stats()["num_clusters"] == 0
+
+
+@pytest.mark.asyncio
+async def test_llm_emitting_explicit_null_for_actions_does_not_crash(fresh_cache):
+    """
+    Regression test for a real bug hit in manual testing: the LLM can emit
+    valid JSON where a field is explicitly null rather than omitted, e.g.
+    {"actions": null} instead of leaving "actions" out entirely. Code using
+    `dict.get("actions", [])` only supplies the [] default when the KEY IS
+    MISSING — an explicit null sails through .get() as None, and the loop
+    over it crashes with 'NoneType is not subscriptable'. This must degrade
+    to an empty actions list, not crash the request.
+    """
+    async def extract_with_null_actions(*args, **kwargs):
+        return {
+            "contexts": [{
+                "goal": "Follow these steps to perform this Display Troubleshooting",
+                "title": "Screen flicker",
+                "score": 0.9,
+                "actions": None,
+            }]
+        }, TokenUsage(prompt_tokens=100, completion_tokens=50)
+
+    with patch("app.cache.semantic_cache.embed", side_effect=fake_embed), \
+         patch.object(orchestrator, "enrich_query_async", return_value=VALID_ENRICHMENT), \
+         patch.object(orchestrator, "extract_structure_async", side_effect=extract_with_null_actions):
+
+        result = await orchestrator.run_pipeline(
+            "my screen keeps flickering", "reference text here", FakeDeeplinkIndex()
+        )
+
+    assert result.response.fallback is None
+    assert result.response.contexts[0].actions == []
 
 
 @pytest.mark.asyncio
@@ -262,3 +315,63 @@ async def test_unrelated_complaint_still_misses_a_seeded_cluster(fresh_cache):
 
     assert result.meta.cache_hit is False
     assert fresh_cache.stats()["num_clusters"] == 2
+
+
+MULTI_ISSUE_EXTRACTION = ({
+    "contexts": [
+        {
+            "goal": "Follow these steps to perform this Display Troubleshooting",
+            "title": "Screen flicker fix",
+            "score": 0.82,
+            "actions": [
+                {
+                    "actionName": "Display Settings",
+                    "description": "It will reduce visible screen flickering",
+                    "category": "auto",
+                    "stepGroups": [{"steps": ["Open Settings", "Tap Display"]}],
+                },
+            ],
+        },
+        {
+            "goal": "Follow these steps to perform this Storage Troubleshooting",
+            "title": "Storage full fix",
+            "score": 0.75,
+            "actions": [
+                {
+                    "actionName": "Storage Cleanup",
+                    "description": "It will free up device storage space",
+                    "category": "auto",
+                    "stepGroups": [{"steps": ["Open Settings", "Tap Storage"]}],
+                },
+            ],
+        },
+    ]
+}, TokenUsage(prompt_tokens=150, completion_tokens=600))
+
+
+@pytest.mark.asyncio
+async def test_two_genuinely_distinct_issues_both_flow_through_as_separate_contexts(fresh_cache):
+    """
+    Idea 1 (multi-issue complaint handling): the schema already supports
+    multiple Goal objects (contexts: List[Goal]) and the orchestrator
+    already loops per-goal for title repair, deeplink resolution, ordering
+    -- this confirms that loop genuinely produces two independent,
+    correctly-processed contexts in the final response, not just that the
+    prompt asks for it. Each context's own action (Display Settings /
+    Storage Cleanup) must survive independently through the pipeline.
+    """
+    with patch("app.cache.semantic_cache.embed", side_effect=fake_embed), \
+         patch.object(orchestrator, "enrich_query_async", return_value=VALID_ENRICHMENT), \
+         patch.object(orchestrator, "extract_structure_async", return_value=MULTI_ISSUE_EXTRACTION):
+
+        result = await orchestrator.run_pipeline(
+            "my screen flickers and storage is full", "reference text here", FakeDeeplinkIndex()
+        )
+
+    assert len(result.response.contexts) == 2
+    titles = {c.title for c in result.response.contexts}
+    assert titles == {"Screen flicker fix", "Storage full fix"}
+    action_names = {
+        a.actionName for c in result.response.contexts for a in c.actions
+    }
+    assert action_names == {"Display Settings", "Storage Cleanup"}

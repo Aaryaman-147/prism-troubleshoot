@@ -13,6 +13,7 @@ import copy
 
 import numpy as np
 import pytest
+from unittest.mock import patch
 
 from app.pipeline.ordering import _match_text, resolve_deeplinks
 
@@ -38,14 +39,15 @@ class FakeIndex:
             for uri, _ in ranking
         }
 
-    def search(self, query_text, top_k=5):
+    def search(self, query_text, top_k=5, alpha=None):
         class E:
             def __init__(self, uri):
                 self.deeplink = uri
         return [(E(uri), score) for uri, score in self._ranking[:top_k]]
 
 
-def _deeplink_of(actions):
+def _deeplink_of(result):
+    actions = result[0] if isinstance(result, tuple) else result
     sg = actions[0]["stepGroups"][0]
     return sg.get("actionableDeeplink", {}).get("deeplink")
 
@@ -106,3 +108,233 @@ class TestBM25Normalization:
         assert weak.max() < 0.2, "a weak best-match must not saturate to ~1.0"
         assert strong.max() > 0.8
         assert weak.max() < strong.max()
+
+
+class TestAmbiguousMatchesSurfaced:
+    def test_near_tie_is_returned_as_ambiguous_not_just_discarded(self):
+        """The margin-abstain case previously just dropped the runner-up.
+        Both candidates must now be returned so a caller can disambiguate."""
+        index = FakeIndex([("bixby://a", 0.60), ("bixby://b", 0.59)])
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], index
+        )
+        assert len(ambiguous) == 1
+        assert ambiguous[0]["actionName"] == "Motion Smoothness"
+        deeplinks = {c["deeplink"] for c in ambiguous[0]["candidates"]}
+        assert deeplinks == {"bixby://a", "bixby://b"}
+        assert confidence == {}  # nothing confidently resolved
+
+    def test_low_confidence_floor_reject_is_not_reported_as_ambiguous(self):
+        """A single weak match (floor rejection) is a different failure mode
+        from two close matches (margin rejection) — must not conflate them
+        into the same "ambiguous" bucket."""
+        index = FakeIndex([("bixby://a", 0.20), ("bixby://b", 0.01)])
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], index
+        )
+        assert ambiguous == []
+        assert confidence == {}
+
+    def test_confident_match_is_recorded_in_confidences(self):
+        index = FakeIndex([("bixby://a", 0.80), ("bixby://b", 0.10)])
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], index
+        )
+        assert ambiguous == []
+        assert confidence == {"Motion Smoothness": 0.80}
+
+
+class TestValidationDeeplinkWiring:
+    def test_valid_expected_outcome_attaches_validation_deeplink(self):
+        from app.pipeline.ordering import attach_validation_deeplinks
+
+        action = copy.deepcopy(MOTION_SMOOTHNESS_ACTION)
+        action["expectedOutcome"] = {
+            "key": "motion_smoothness_mode",
+            "resultType": "str",
+            "condition": "equal",
+            "value": "Standard",
+        }
+        action["stepGroups"][0]["actionableDeeplink"] = {
+            "deeplink": "bixby://masked/act/display_brightness",
+            "description": "desc",
+            "message": "",
+        }
+        result = attach_validation_deeplinks([action])
+        vdl = result[0]["stepGroups"][0]["validationDeeplink"]
+        assert vdl["deeplink"] == "bixby://masked/act/display_brightness"
+        assert vdl["key"] == "motion_smoothness_mode"
+        assert vdl["condition"] == "equal"
+        assert vdl["value"] == "Standard"
+
+    def test_no_actionable_deeplink_means_no_validation_deeplink(self):
+        """Nothing to verify against if nothing was resolved — must not
+        attach a validation target when there's no actionable one."""
+        from app.pipeline.ordering import attach_validation_deeplinks
+
+        action = copy.deepcopy(MOTION_SMOOTHNESS_ACTION)
+        action["expectedOutcome"] = {
+            "key": "x", "resultType": "str", "condition": "equal", "value": "y",
+        }
+        result = attach_validation_deeplinks([action])
+        assert "validationDeeplink" not in result[0]["stepGroups"][0]
+
+    def test_malformed_expected_outcome_is_silently_dropped(self):
+        """A bonus field should degrade gracefully, not raise, on bad LLM
+        output — missing/invalid resultType or condition here."""
+        from app.pipeline.ordering import attach_validation_deeplinks
+
+        action = copy.deepcopy(MOTION_SMOOTHNESS_ACTION)
+        action["expectedOutcome"] = {"key": "x", "resultType": "not_a_real_type"}
+        action["stepGroups"][0]["actionableDeeplink"] = {
+            "deeplink": "bixby://masked/act/display_brightness",
+            "description": "d", "message": "",
+        }
+        result = attach_validation_deeplinks([action])  # must not raise
+        assert "validationDeeplink" not in result[0]["stepGroups"][0]
+
+    def test_missing_expected_outcome_is_a_noop(self):
+        from app.pipeline.ordering import attach_validation_deeplinks
+
+        action = copy.deepcopy(MOTION_SMOOTHNESS_ACTION)
+        action["stepGroups"][0]["actionableDeeplink"] = {
+            "deeplink": "bixby://masked/act/display_brightness",
+            "description": "d", "message": "",
+        }
+        result = attach_validation_deeplinks([action])  # must not raise
+        assert "validationDeeplink" not in result[0]["stepGroups"][0]
+
+
+class TestAlphaOverride:
+    def test_search_alpha_override_changes_ranking_without_rebuilding_index(self):
+        """Per-call alpha must actually change fusion, proving the live
+        demo slider would have a real effect — not just accept the param."""
+        from app.pipeline.deeplink_retrieval import DeeplinkIndex
+        import numpy as np
+
+        idx = DeeplinkIndex.__new__(DeeplinkIndex)
+        idx.alpha = 0.5
+        idx.bm25_saturation_k = 3.0
+
+        class E:
+            def __init__(self, name):
+                self.deeplink = name
+
+        idx.entries = [E("a"), E("b")]
+        idx._catalog_by_uri = {"a": {}, "b": {}}
+
+        class FakeBM25:
+            def get_scores(self, tokens):
+                return np.array([10.0, 0.0])  # a wins on BM25
+
+        idx._bm25 = FakeBM25()
+        idx._dense_matrix = np.array([[1.0, 0.0], [0.0, 1.0]])  # b wins on dense (row 1 . q_vec)
+
+        with patch("app.pipeline.deeplink_retrieval.embed", return_value=np.array([0.0, 1.0])):
+            bm25_leaning = idx.search("query", top_k=1, alpha=0.0)
+            dense_leaning = idx.search("query", top_k=1, alpha=1.0)
+
+        assert bm25_leaning[0][0].deeplink == "a"
+        assert dense_leaning[0][0].deeplink == "b"
+
+
+class TestDummyPositiveFallback:
+    """
+    bixby://dummy_positive is a real catalog entry (per the theme spec:
+    "reserved generic placeholder used exclusively when a step opens a
+    valid Settings screen not currently indexed in the catalog"), not a
+    code constant. Left to compete in normal ranking it's effectively dead
+    (its own description is generic filler text that rarely wins) -- these
+    tests confirm it's used as an explicit fallback instead, and never
+    contaminates normal matching or the ambiguous-candidates list.
+    """
+
+    def _index_with_dummy(self, ranking):
+        catalog = {uri: {"description": f"desc for {uri}", "message": f"msg for {uri}"}
+                   for uri, _ in ranking}
+        catalog["bixby://dummy_positive"] = {
+            "description": "Generic placeholder for unindexed but valid settings screen",
+            "message": "Opens a valid settings screen not currently in catalog",
+        }
+
+        class E:
+            def __init__(self, uri):
+                self.deeplink = uri
+
+        class Idx:
+            def __init__(self):
+                self.catalog_by_uri = catalog
+
+            def search(self, query_text, top_k=3, alpha=None):
+                return [(E(uri), score) for uri, score in ranking[:top_k]]
+
+        return Idx()
+
+    def test_low_confidence_action_falls_back_to_dummy_positive(self):
+        index = self._index_with_dummy([("bixby://a", 0.20), ("bixby://b", 0.01)])
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], index
+        )
+        sg = actions[0]["stepGroups"][0]
+        assert sg["actionableDeeplink"]["deeplink"] == "bixby://dummy_positive"
+        assert confidence == {}  # dummy fallback isn't a confident real match
+
+    def test_ambiguous_action_gets_both_dummy_fallback_and_candidates(self):
+        """The auto action still carries SOME actionable deeplink (the
+        placeholder) even while the real disambiguation is offered
+        separately via ambiguous_matches."""
+        index = self._index_with_dummy([("bixby://a", 0.60), ("bixby://b", 0.59)])
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], index
+        )
+        sg = actions[0]["stepGroups"][0]
+        assert sg["actionableDeeplink"]["deeplink"] == "bixby://dummy_positive"
+        assert len(ambiguous) == 1
+        assert {c["deeplink"] for c in ambiguous[0]["candidates"]} == {"bixby://a", "bixby://b"}
+
+    def test_confident_match_never_uses_dummy_positive(self):
+        index = self._index_with_dummy([("bixby://a", 0.80), ("bixby://b", 0.10)])
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], index
+        )
+        sg = actions[0]["stepGroups"][0]
+        assert sg["actionableDeeplink"]["deeplink"] == "bixby://a"
+
+    def test_dummy_positive_itself_is_never_offered_as_a_normal_or_ambiguous_match(self):
+        """If dummy_positive happens to rank highly on its own generic text
+        (weak query), it must be filtered before floor/margin logic --
+        never attached as if it were a real specific match, and never
+        listed alongside real candidates in ambiguous_matches."""
+        index = self._index_with_dummy([
+            ("bixby://dummy_positive", 0.90),  # ranks first on its own vague text
+            ("bixby://a", 0.85),
+            ("bixby://b", 0.10),
+        ])
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], index
+        )
+        sg = actions[0]["stepGroups"][0]
+        # "a" at 0.85 clears the floor and isn't ambiguous against "b" at
+        # 0.10 once dummy_positive is filtered out of the ranking.
+        assert sg["actionableDeeplink"]["deeplink"] == "bixby://a"
+        assert ambiguous == []
+
+    def test_missing_dummy_positive_in_catalog_degrades_to_no_deeplink(self):
+        """Defensive: if a future/real catalog doesn't include the
+        placeholder, fall back to the old behavior (no deeplink) rather
+        than crashing."""
+        class E:
+            def __init__(self, uri):
+                self.deeplink = uri
+
+        class IdxNoDummy:
+            catalog_by_uri = {"bixby://a": {"description": "d", "message": "m"}}
+
+            def search(self, query_text, top_k=3, alpha=None):
+                return [(E("bixby://a"), 0.20)]  # below floor
+
+        actions, ambiguous, confidence = resolve_deeplinks(
+            [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], IdxNoDummy()
+        )
+        sg = actions[0]["stepGroups"][0]
+        assert "actionableDeeplink" not in sg

@@ -12,6 +12,8 @@ import pytest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 
+from app.core.llm_client import TokenUsage
+
 
 def fake_embed(text):
     return np.array([1.0, 0.0])
@@ -72,9 +74,9 @@ class TestTroubleshootEndpointValidation:
         with patch("app.pipeline.orchestrator.enrich_query_async") as mock_enrich, \
              patch("app.pipeline.orchestrator.extract_structure_async") as mock_extract:
             async def fake_enrich(q):
-                return {"canonical_query": q, "query_variations": []}
+                return {"canonical_query": q, "query_variations": []}, TokenUsage()
             async def fake_extract(q, r):
-                return {"contexts": [], "fallback": "no_match"}
+                return {"contexts": [], "fallback": "no_match"}, TokenUsage()
             mock_enrich.side_effect = fake_enrich
             mock_extract.side_effect = fake_extract
 
@@ -98,9 +100,9 @@ class TestTroubleshootEndpointHappyPath:
         with patch("app.pipeline.orchestrator.enrich_query_async") as mock_enrich, \
              patch("app.pipeline.orchestrator.extract_structure_async") as mock_extract:
             async def fake_enrich(q):
-                return {"canonical_query": q, "query_variations": [q]}
+                return {"canonical_query": q, "query_variations": [q]}, TokenUsage()
             async def fake_extract(q, r):
-                return {"contexts": [], "fallback": "no_match"}
+                return {"contexts": [], "fallback": "no_match"}, TokenUsage()
             mock_enrich.side_effect = fake_enrich
             mock_extract.side_effect = fake_extract
 
