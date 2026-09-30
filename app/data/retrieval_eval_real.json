@@ -1,0 +1,230 @@
+{
+ "_readme": "Labelled deeplink-retrieval probes against Samsung's REAL catalog. expected_message=null means the action must NOT receive a catalog deeplink. Correctness is judged by message, since the catalog has duplicate entries under different URIs.",
+ "probes": [
+  {
+   "actionName": "Back Up Phone Data",
+   "steps": [
+    "Open Settings.",
+    "Tap Accounts and backup.",
+    "Select Back up data."
+   ],
+   "expected_message": "Enable Back up data (TechCorp Cloud)"
+  },
+  {
+   "actionName": "Disable Mouse Keys",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Turn off Mouse keys."
+   ],
+   "expected_message": "Disable Mouse Keys"
+  },
+  {
+   "actionName": "Adjust Touch Sensitivity",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Turn on Touch sensitivity."
+   ],
+   "expected_message": "Enable Touch sensitivity"
+  },
+  {
+   "actionName": "Rotate To Landscape Mode",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Tap Rotate to landscape mode."
+   ],
+   "expected_message": "View Rotate to landscape mode"
+  },
+  {
+   "actionName": "Adjust Dark Mode",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Tap Dark mode settings."
+   ],
+   "expected_message": "Adjust Dark mode settings"
+  },
+  {
+   "actionName": "Change Screen Timeout",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Tap Screen timeout.",
+    "Select a longer timeout."
+   ],
+   "expected_message": "Adjust Timeout"
+  },
+  {
+   "actionName": "Set Motion Smoothness",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Tap Motion smoothness.",
+    "Select Standard."
+   ],
+   "expected_message": "Adjust Motion smoothness"
+  },
+  {
+   "actionName": "Enable Eye Comfort Shield",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Turn on Eye comfort shield."
+   ],
+   "expected_message": "Enable Eye Comfort Shield"
+  },
+  {
+   "actionName": "Turn On Wi-Fi",
+   "steps": [
+    "Open Settings.",
+    "Tap Connections.",
+    "Turn on Wi-Fi."
+   ],
+   "expected_message": "Enable WiFi"
+  },
+  {
+   "actionName": "Turn Off Bluetooth",
+   "steps": [
+    "Open Settings.",
+    "Tap Connections.",
+    "Turn off Bluetooth."
+   ],
+   "expected_message": "Disable Bluetooth"
+  },
+  {
+   "actionName": "Enable Location",
+   "steps": [
+    "Open Settings.",
+    "Tap Location.",
+    "Turn on Location."
+   ],
+   "expected_message": "Enable Location"
+  },
+  {
+   "actionName": "Schedule Automatic Restart",
+   "steps": [
+    "Open Settings.",
+    "Tap Device care.",
+    "Tap Restart on schedule."
+   ],
+   "expected_message": "View Restart on schedule"
+  },
+  {
+   "actionName": "Turn On Power Saving",
+   "steps": [
+    "Open Settings.",
+    "Tap Battery.",
+    "Turn on Power saving."
+   ],
+   "expected_message": "Enable Power saving"
+  },
+  {
+   "actionName": "Change Navigation Bar",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Tap Navigation bar."
+   ],
+   "expected_message": "View Navigation bar"
+  },
+  {
+   "actionName": "Enable Multi Window",
+   "steps": [
+    "Open Settings.",
+    "Tap Advanced features.",
+    "Turn on Multi window for all apps."
+   ],
+   "expected_message": "Enable Multi window for all apps"
+  },
+  {
+   "actionName": "Enable Full Screen In Split View",
+   "steps": [
+    "Open Settings.",
+    "Tap Advanced features.",
+    "Turn on Full screen in Split screen view."
+   ],
+   "expected_message": "Enable Full screen in Split screen view"
+  },
+  {
+   "actionName": "Open Reset Options",
+   "steps": [
+    "Open Settings.",
+    "Tap General management.",
+    "Tap Reset."
+   ],
+   "expected_message": "View Reset Options"
+  },
+  {
+   "actionName": "Turn On Adaptive Display",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Turn on Adaptive display."
+   ],
+   "expected_message": "Enable Adaptive Display"
+  },
+  {
+   "actionName": "Remove Background Limit",
+   "steps": [
+    "Open Settings.",
+    "Tap Battery.",
+    "Turn off Background usage limits."
+   ],
+   "expected_message": "Disable Background Limit"
+  },
+  {
+   "actionName": "Schedule Screen Repair Service",
+   "steps": [
+    "Contact Customer Support or visit an authorized Service Center."
+   ],
+   "expected_message": null
+  },
+  {
+   "actionName": "Restart The Device",
+   "steps": [
+    "Press and hold the Side key and Volume down key for 7 seconds."
+   ],
+   "expected_message": null
+  },
+  {
+   "actionName": "Inspect For Physical Damage",
+   "steps": [
+    "Check the phone, charger and USB cable for damage or liquid exposure."
+   ],
+   "expected_message": null
+  },
+  {
+   "actionName": "Clean Charging Port",
+   "steps": [
+    "Remove the case.",
+    "Gently clean the USB port with a dry soft brush."
+   ],
+   "expected_message": null
+  },
+  {
+   "actionName": "Charge The Phone",
+   "steps": [
+    "Connect the original charger.",
+    "Charge for at least 30 minutes before turning it on."
+   ],
+   "expected_message": null
+  },
+  {
+   "actionName": "Reinsert The SIM Card",
+   "steps": [
+    "Power off the phone.",
+    "Remove the SIM tray and reinsert the SIM card."
+   ],
+   "expected_message": null
+  },
+  {
+   "actionName": "Contact Your Carrier",
+   "steps": [
+    "Call your carrier to confirm the new device is activated on your account."
+   ],
+   "expected_message": null
+  }
+ ]
+}

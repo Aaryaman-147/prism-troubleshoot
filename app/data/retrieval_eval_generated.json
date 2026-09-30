@@ -1,0 +1,902 @@
+{
+ "_readme": "LLM-written probes; label = source catalog entry. Two contradictory duplicates removed after review (an identical action name labelled with two different entries).",
+ "probes": [
+  {
+   "actionName": "Turn On Data Saver",
+   "steps": [
+    "Open Settings.",
+    "Tap Network & internet.",
+    "Select Data Saver.",
+    "Toggle Data Saver on."
+   ],
+   "expected_message": "Enable Turn on now",
+   "source_id": "DL-0080",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Check USB Lock Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Security.",
+    "Select More security settings.",
+    "Tap USB debugging or USB connections while locked."
+   ],
+   "expected_message": "View Security Settings",
+   "source_id": "DL-0038",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Check Fridge Door Status",
+   "steps": [
+    "Open the SmartThings app.",
+    "Select your refrigerator.",
+    "Tap Device status.",
+    "View Auto Open Door status."
+   ],
+   "expected_message": "Refrigerator Auto Open Door Status",
+   "source_id": "DL-0469",
+   "originalType": null,
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Air Command Icon",
+   "steps": [
+    "Open Settings.",
+    "Tap Advanced features.",
+    "Select S Pen.",
+    "Toggle Show Air command icon on."
+   ],
+   "expected_message": "Enable Show Air command icon",
+   "source_id": "DL-0433",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Disable Volume Button Media Control",
+   "steps": [
+    "Open Settings.",
+    "Go to Sounds and vibration.",
+    "Tap Volume.",
+    "Turn off Use volume keys for media."
+   ],
+   "expected_message": "Disable Use Volume buttons for media",
+   "source_id": "DL-0304",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Change Notification Pop-up Style",
+   "steps": [
+    "Open Settings.",
+    "Tap Notifications.",
+    "Select Notification pop-up style.",
+    "Choose Banners, Brief, or Detailed."
+   ],
+   "expected_message": "Adjust Notification pop-up style",
+   "source_id": "DL-0181",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Magnification Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Select Visibility enhancements.",
+    "Tap Magnification."
+   ],
+   "expected_message": "View Magnification Settings",
+   "source_id": "DL-0388",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Enable Keypad Vibration",
+   "steps": [
+    "Open Settings.",
+    "Tap Sounds and vibration.",
+    "Select System vibration.",
+    "Toggle Dialing keypad vibration on."
+   ],
+   "expected_message": "Enable Dialing keypad",
+   "source_id": "DL-0087",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Check Fridge Temperature Settings",
+   "steps": [
+    "Open the SmartThings app.",
+    "Select your refrigerator.",
+    "Tap Device settings.",
+    "View Temperature settings for fridge and freezer."
+   ],
+   "expected_message": "Refrigerator Temperature Settings Status",
+   "source_id": "DL-0473",
+   "originalType": null,
+   "generated": true
+  },
+  {
+   "actionName": "Adjust Screen Transparency",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Select Transparency and set the level."
+   ],
+   "expected_message": "Adjust Transparency",
+   "source_id": "DL-0325",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Motion Lighting",
+   "steps": [
+    "Open Settings.",
+    "Go to TV Settings.",
+    "Enable Motion Lighting."
+   ],
+   "expected_message": "Enable Motion Lighting",
+   "source_id": "DL-0532",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "View Widget Labels",
+   "steps": [
+    "Open Settings.",
+    "Tap Widgets.",
+    "Select Show labels for featured widgets."
+   ],
+   "expected_message": "View Show labels for featured widgets",
+   "source_id": "DL-0462",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Set Stylus Removal Action",
+   "steps": [
+    "Open Settings.",
+    "Go to Advanced features.",
+    "Choose action when stylus is removed."
+   ],
+   "expected_message": "Adjust When Stylus Pen is removed",
+   "source_id": "DL-0444",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn Off Palm Swipe Capture",
+   "steps": [
+    "Open Settings.",
+    "Tap Advanced features.",
+    "Disable Palm swipe to capture."
+   ],
+   "expected_message": "Disable Palm swipe to capture",
+   "source_id": "DL-0186",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Stop Auto Delete After Share",
+   "steps": [
+    "Open Settings.",
+    "Go to Advanced features.",
+    "Turn off Delete after sharing."
+   ],
+   "expected_message": "Disable Delete after sharing",
+   "source_id": "DL-0361",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Enable Double Tap to Sleep",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Turn on Double tap to turn off screen."
+   ],
+   "expected_message": "Enable Double tap to turn off screen",
+   "source_id": "DL-0091",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Disable Double Tap to Wake",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Turn off Double tap to turn on screen."
+   ],
+   "expected_message": "Disable Double tap to turn on screen",
+   "source_id": "DL-0088",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Auto Sync",
+   "steps": [
+    "Open Settings.",
+    "Tap Accounts and backup.",
+    "Toggle on Auto sync data."
+   ],
+   "expected_message": "Enable Auto-Sync",
+   "source_id": "DL-0028",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Change Status Bar Style",
+   "steps": [
+    "Open Settings.",
+    "Tap Notifications.",
+    "Select Status bar and choose a style."
+   ],
+   "expected_message": "Adjust Status bar",
+   "source_id": "DL-0264",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Change Lock Screen Notifications",
+   "steps": [
+    "Open Settings.",
+    "Tap Lock screen.",
+    "Select Notification style and pick an option."
+   ],
+   "expected_message": "Adjust Lock screen",
+   "source_id": "DL-0153",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Apps Screen Grid Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Home screen.",
+    "Select Apps screen grid."
+   ],
+   "expected_message": "View Apps screen grid",
+   "source_id": "DL-0453",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Do Not Disturb",
+   "steps": [
+    "Open Settings.",
+    "Tap Notifications.",
+    "Enable Do not disturb."
+   ],
+   "expected_message": "Enable Do not disturb",
+   "source_id": "DL-0506",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Adjust System Vibration",
+   "steps": [
+    "Open Settings.",
+    "Tap Sounds and vibration.",
+    "Select Vibration intensity and adjust system level."
+   ],
+   "expected_message": "Adjust System",
+   "source_id": "DL-0272",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Change Picture Mode",
+   "steps": [
+    "Open Settings.",
+    "Tap Picture.",
+    "Select Picture Mode and choose an option."
+   ],
+   "expected_message": "Adjust Picture Mode",
+   "source_id": "DL-0540",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Mobile Hotspot",
+   "steps": [
+    "Open Settings.",
+    "Tap Connections.",
+    "Enable Mobile Hotspot and Tethering."
+   ],
+   "expected_message": "Enable WiFi",
+   "source_id": "DL-0312",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Audio Description",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Enable Audio description."
+   ],
+   "expected_message": "Enable Audio description",
+   "source_id": "DL-0277",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Change Performance Profile",
+   "steps": [
+    "Open Settings.",
+    "Tap Performance.",
+    "Select a performance profile."
+   ],
+   "expected_message": "Adjust Performance profile",
+   "source_id": "DL-0418",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Adjust TV Sound Mode",
+   "steps": [
+    "Open Settings.",
+    "Go to Sound.",
+    "Choose a sound mode."
+   ],
+   "expected_message": "Adjust Volume",
+   "source_id": "DL-0562",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Set Notification Volume",
+   "steps": [
+    "Open Settings.",
+    "Tap Sound & Vibration.",
+    "Adjust notification volume slider."
+   ],
+   "expected_message": "Adjust Notifications",
+   "source_id": "DL-0185",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Set System Volume Level",
+   "steps": [
+    "Open Settings.",
+    "Go to Sound.",
+    "Adjust system volume slider."
+   ],
+   "expected_message": "Adjust System",
+   "source_id": "DL-0273",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Touch Sounds Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Sound.",
+    "Select Do Not Disturb."
+   ],
+   "expected_message": "View Sound Settings",
+   "source_id": "DL-0324",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn Off Gesture Mute",
+   "steps": [
+    "Open Settings.",
+    "Tap Gestures.",
+    "Disable mute with gestures."
+   ],
+   "expected_message": "Disable Gesture Controls",
+   "source_id": "DL-0093",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Symbol Panel Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Language & Input.",
+    "Select Symbol panel behavior."
+   ],
+   "expected_message": "View Keep symbol panel open",
+   "source_id": "DL-0390",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Hide Edge Icon",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Turn off Show as edge icon."
+   ],
+   "expected_message": "Disable Show as edge icon",
+   "source_id": "DL-0326",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Run Overheating Diagnosis",
+   "steps": [
+    "Open Settings.",
+    "Tap Battery & Device Care.",
+    "Select Diagnose overheating."
+   ],
+   "expected_message": "Diagnose Overheating",
+   "source_id": "DL-0476",
+   "originalType": null,
+   "generated": true
+  },
+  {
+   "actionName": "View Speech Output Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Select TalkBack.",
+    "Choose"
+   ],
+   "expected_message": "View Display speech output",
+   "source_id": "DL-0346",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Adjust Notification Vibration",
+   "steps": [
+    "Open Settings.",
+    "Tap Sound and vibration.",
+    "Select Vibration intensity.",
+    "Adjust Notifications slider."
+   ],
+   "expected_message": "Adjust Notifications",
+   "source_id": "DL-0183",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn Off High Contrast Keyboard",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Select Visibility enhancements.",
+    "Toggle off High contrast keyboard."
+   ],
+   "expected_message": "Disable High Contrast",
+   "source_id": "DL-0119",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Top Right Corner Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Advanced features.",
+    "Select Side key.",
+    "Choose Top right corner action."
+   ],
+   "expected_message": "View Top right",
+   "source_id": "DL-0288",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn Off Fast Wireless Charging",
+   "steps": [
+    "Open Settings.",
+    "Tap Battery and device care.",
+    "Select Battery.",
+    "Toggle off Fast wireless charging."
+   ],
+   "expected_message": "Disable Fast wireless charging",
+   "source_id": "DL-0405",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Adjust Scrolling Speed",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Select Interaction and dexterity.",
+    "Adjust Pointer speed."
+   ],
+   "expected_message": "Adjust Speed",
+   "source_id": "DL-0164",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Slow Keys",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Select Interaction and dexterity.",
+    "Toggle on Slow keys."
+   ],
+   "expected_message": "Enable Slow Keys",
+   "source_id": "DL-0254",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Enable Cloud Backup",
+   "steps": [
+    "Open Settings.",
+    "Tap Backup & restore.",
+    "Turn on Back up data (TechCorp Cloud)."
+   ],
+   "expected_message": "Enable Back up data (TechCorp Cloud)",
+   "source_id": "DL-0542",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn Off Super HDR",
+   "steps": [
+    "Open Settings.",
+    "Go to Display.",
+    "Disable Super HDR."
+   ],
+   "expected_message": "Disable Super HDR",
+   "source_id": "DL-0230",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Disable Power Saving Mode",
+   "steps": [
+    "Open Settings.",
+    "Tap Battery.",
+    "Turn off Power saving."
+   ],
+   "expected_message": "Disable Power saving",
+   "source_id": "DL-0411",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Enable High Contrast Text",
+   "steps": [
+    "Open Settings.",
+    "Select Accessibility.",
+    "Turn on High Contrast."
+   ],
+   "expected_message": "Enable High Contrast",
+   "source_id": "DL-0279",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Bluetooth Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Connected devices.",
+    "Select Bluetooth."
+   ],
+   "expected_message": "View Bluetooth",
+   "source_id": "DL-0044",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Top Left Corner Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Gestures.",
+    "Select Top left corner action."
+   ],
+   "expected_message": "View Top left",
+   "source_id": "DL-0287",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Adjust Vibration Strength",
+   "steps": [
+    "Open Settings.",
+    "Tap Sound & vibration.",
+    "Set Vibration intensity to preferred level."
+   ],
+   "expected_message": "Adjust Vibration intensity",
+   "source_id": "DL-0563",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Disable Full Screen in Split View",
+   "steps": [
+    "Open Settings.",
+    "Go to Display.",
+    "Turn off Full screen in Split screen view."
+   ],
+   "expected_message": "Disable Full screen in Split screen view",
+   "source_id": "DL-0111",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Disable Swipe-to-Tap Replace with Tap",
+   "steps": [
+    "Open Settings.",
+    "Tap System.",
+    "Turn off Replace swipe with single tap."
+   ],
+   "expected_message": "Disable Replace swipe with single tap",
+   "source_id": "DL-0328",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Adjust Dark Mode Wallpaper",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Select Dark mode wallpaper.",
+    "Choose a new value."
+   ],
+   "expected_message": "Adjust Dark mode settings",
+   "source_id": "DL-0078",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn Off Highlight Buttons",
+   "steps": [
+    "Open Settings.",
+    "Go to Accessibility.",
+    "Toggle off Highlight buttons."
+   ],
+   "expected_message": "Disable Highlight buttons",
+   "source_id": "DL-0121",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Disable Camera Flash Alert",
+   "steps": [
+    "Open Settings.",
+    "Navigate to Accessibility.",
+    "Turn off Camera feedback."
+   ],
+   "expected_message": "Disable Camera Feedback",
+   "source_id": "DL-0055",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Stop Auto Screen Dimming",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Disable Auto dim screen."
+   ],
+   "expected_message": "Disable Auto dim screen",
+   "source_id": "DL-0401",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open More Security Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Security.",
+    "Select View More security settings."
+   ],
+   "expected_message": "View More security settings",
+   "source_id": "DL-0539",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Check Air Conditioner Mode",
+   "steps": [
+    "Open Settings.",
+    "Go to Connected devices.",
+    "Select Air conditioner.",
+    "View current mode."
+   ],
+   "expected_message": "Set Air Conditioner Mode",
+   "source_id": "DL-0468",
+   "originalType": null,
+   "generated": true
+  },
+  {
+   "actionName": "Adjust White Balance Level",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Select White balance.",
+    "Slide to desired value."
+   ],
+   "expected_message": "Adjust White balance",
+   "source_id": "DL-0233",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Color Correction Shortcut",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Select Color correction.",
+    "Tap View shortcut."
+   ],
+   "expected_message": "View Color correction shortcut",
+   "source_id": "DL-0077",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Do Not Disturb Settings",
+   "steps": [
+    "Open Settings.",
+    "Tap Sound.",
+    "Select Do not disturb."
+   ],
+   "expected_message": "View Do not disturb",
+   "source_id": "DL-0101",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Ethernet Tethering Page",
+   "steps": [
+    "Open Settings.",
+    "Tap Network & internet.",
+    "Select Hotspot & tethering.",
+    "Choose Ethernet tethering."
+   ],
+   "expected_message": "View Ethernet tethering",
+   "source_id": "DL-0504",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "View TechCorp Care+ Subscription",
+   "steps": [
+    "Open Settings.",
+    "Tap TechCorp Warranty Care.",
+    "Select View Check TechCorp Care+ subscription"
+   ],
+   "expected_message": "View Check TechCorp Care+ subscription",
+   "source_id": "DL-0576",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Adjust Screen Contrast",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Select Adjust Contrast and set your preferred level"
+   ],
+   "expected_message": "Adjust Contrast",
+   "source_id": "DL-0502",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Enable Location Services",
+   "steps": [
+    "Open Settings.",
+    "Tap Location.",
+    "Turn on Enable Location"
+   ],
+   "expected_message": "Enable Location",
+   "source_id": "DL-0149",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Check Current Volume Level",
+   "steps": [
+    "Open Settings.",
+    "Tap Sounds and vibration.",
+    "Select Check Current Setting to view volume"
+   ],
+   "expected_message": "Check Current Setting",
+   "source_id": "DL-0472",
+   "originalType": null,
+   "generated": true
+  },
+  {
+   "actionName": "Adjust Screen Brightness",
+   "steps": [
+    "Open Settings.",
+    "Tap Display.",
+    "Slide the brightness bar to your preferred level."
+   ],
+   "expected_message": "Adjust Brightness",
+   "source_id": "DL-0232",
+   "originalType": "updateURL",
+   "generated": true
+  },
+  {
+   "actionName": "Open Notification Settings",
+   "steps": [
+    "Swipe down from the top of the screen.",
+    "Tap the gear icon in the notification panel.",
+    "Select Notification settings."
+   ],
+   "expected_message": "View Notification Settings",
+   "source_id": "DL-0460",
+   "originalType": "onClickURL",
+   "generated": true
+  },
+  {
+   "actionName": "Turn On Mobile Data",
+   "steps": [
+    "Open Settings.",
+    "Tap Network & internet.",
+    "Toggle Mobile data to ON."
+   ],
+   "expected_message": "Enable Mobile data",
+   "source_id": "DL-0082",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Enable Hide Bars in Screenshots",
+   "steps": [
+    "Open Settings.",
+    "Tap System > Advanced > Gestures.",
+    "Turn on Hide status and navigation bars."
+   ],
+   "expected_message": "Enable Hide status and navigation bars",
+   "source_id": "DL-0364",
+   "originalType": "onURL",
+   "generated": true
+  },
+  {
+   "actionName": "Disable Gesture Vibration",
+   "steps": [
+    "Open Settings.",
+    "Tap System > Gestures.",
+    "Turn off Navigation gestures vibration."
+   ],
+   "expected_message": "Disable Gesture Controls",
+   "source_id": "DL-0170",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Check Battery Usage",
+   "steps": [
+    "Open Settings.",
+    "Tap Battery.",
+    "Review app usage and tap Diagnose battery drain."
+   ],
+   "expected_message": "Diagnose Battery Drain",
+   "source_id": "DL-0474",
+   "originalType": null,
+   "generated": true
+  },
+  {
+   "actionName": "Disable Hide Bars in Screenshots",
+   "steps": [
+    "Open Settings.",
+    "Tap System > Advanced > Gestures.",
+    "Turn off Hide status and navigation bars."
+   ],
+   "expected_message": "Disable Hide status and navigation bars",
+   "source_id": "DL-0363",
+   "originalType": "offURL",
+   "generated": true
+  },
+  {
+   "actionName": "Enable Touch Feedback",
+   "steps": [
+    "Open Settings.",
+    "Tap Accessibility.",
+    "Turn on Touch interactions."
+   ],
+   "expected_message": "Enable Touch interactions",
+   "source_id": "DL-0298",
+   "originalType": "onURL",
+   "generated": true
+  }
+ ]
+}
