@@ -6,7 +6,7 @@ instead of guessing.
 
 **Samsung PRISM GenAI Hackathon 2026 (3rd Edition), Theme 02. Team Order 66.**
 
-**Demo video:** [watch here](VIDEO_LINK) · **Deck:** [submission/Thapar_Order66_Submission.pptx](submission/Thapar_Order66_Submission.pptx)
+**Demo video:** [watch here](https://drive.google.com/file/d/10Exkw4bSvbSFb3ADYi13eaOImpLcP60E/view?usp=sharing) · **Deck:** [submission/Thapar_Order66_Submission.pptx](submission/Thapar_Order66_Submission.pptx)
 
 ## The problem
 
