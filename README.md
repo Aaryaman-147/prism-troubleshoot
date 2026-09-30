@@ -344,21 +344,6 @@ check at the final thresholds (see HANDOFF.md).
 The judged version is the commit tagged **`PRISM_GENAI_HACKATHON_Y2026`**
 (see HANDOFF.md for the exact commands).
 
-## Project layout
-
-```
-app/
-  pipeline/   orchestrator, enrichment, extraction, relevance, grounding,
-              deeplink_retrieval, ordering, normalize
-  cache/      semantic cache, config-fingerprinted pre-warm
-  eval/       batch runner & metrics, ablation, calibration, probe generation, review sheet
-  data/       Samsung's files, labelled probes, reference schema + sample output
-frontend/     index.html
-scripts/      evaluation & diagnostics CLIs
-tests/        373 offline tests
-docker/       Dockerfile, docker-compose.yml
-```
-
 ## License
 
 MIT
