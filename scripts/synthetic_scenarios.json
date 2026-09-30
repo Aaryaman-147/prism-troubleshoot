@@ -1,0 +1,353 @@
+[
+  {
+    "id": "S1-01",
+    "query": "My phone gets really hot when I'm just browsing the internet, even with low brightness.",
+    "siis_response": {
+      "title": "Device overheating during light use",
+      "content": "Overheating during light use is often caused by background apps or a high refresh rate. Open Settings, tap Battery, tap Background usage limits, and turn on Put unused apps to sleep. Then open Settings, tap Display, tap Motion smoothness, and select Standard."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-02",
+    "query": "Bluetooth keeps disconnecting from my car every few minutes during a call.",
+    "siis_response": {
+      "title": "Bluetooth disconnects from car",
+      "content": "Repeated Bluetooth drops are usually fixed by re-pairing. Open Settings, tap Connections, tap Bluetooth, tap the gear icon next to the car, and tap Unpair. Then pair the car again from the car's menu."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-03",
+    "query": "The fingerprint sensor stopped recognizing my thumb after the last update.",
+    "siis_response": {
+      "title": "Fingerprint not recognized after update",
+      "content": "After a software update, re-registering fingerprints restores recognition. Open Settings, tap Security and privacy, tap Biometrics, tap Fingerprints, remove the existing fingerprint, and add it again."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-04",
+    "query": "Notifications are delayed by several minutes, sometimes I miss calls entirely.",
+    "siis_response": {
+      "title": "Delayed notifications",
+      "content": "Battery optimization can delay notifications. Open Settings, tap Apps, select the affected app, tap Battery, and choose Unrestricted."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-05",
+    "query": "My keyboard keeps switching to a different language on its own.",
+    "siis_response": {
+      "title": "Keyboard language switching",
+      "content": "The keyboard can switch languages when multiple languages are enabled. Open Settings, tap General management, tap Keyboard, tap Languages and types, and remove languages you do not use."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-06",
+    "query": "Photos I take look blurry and grainy even in good lighting.",
+    "siis_response": {
+      "title": "Blurry camera photos",
+      "content": "Blurry photos are often caused by a dirty lens or a camera setting. Clean the rear lens with a soft cloth. Then open the Camera app, tap the settings icon, and tap Reset settings."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-07",
+    "query": "The phone randomly restarts itself once or twice a day.",
+    "siis_response": {
+      "title": "Random restarts",
+      "content": "Random restarts can be caused by the auto-restart schedule or a faulty app. Open Settings, tap Device care, tap the three-dot menu, tap Automation, and turn off Auto restart at set times. If restarts continue, restart in Safe mode to check third-party apps."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-08",
+    "query": "Wi-Fi connects but there's no internet, and it happens only at my office.",
+    "siis_response": {
+      "title": "Wi-Fi connected without internet",
+      "content": "A network that connects without internet can be fixed by forgetting and rejoining it. Open Settings, tap Connections, tap Wi-Fi, tap the gear icon next to the network, tap Forget, then rejoin the network."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-09",
+    "query": "Voice calls sound muffled and the other person says I sound far away.",
+    "siis_response": {
+      "title": "Muffled call audio",
+      "content": "Muffled call audio is often caused by a blocked microphone or noise reduction. Remove the phone case and clean the microphone hole. Open the Phone app, tap the three-dot menu, tap Settings, and turn off Noise reduction."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S1-10",
+    "query": "The clock and calendar show the wrong time zone after I landed from a trip.",
+    "siis_response": {
+      "title": "Wrong time zone after travel",
+      "content": "Enable automatic time zone updates. Open Settings, tap General management, tap Date and time, and turn on Automatic time zone."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-11",
+    "query": "Split-screen mode keeps closing one of the two apps by itself after about a minute.",
+    "siis_response": {
+      "title": "Split screen closes an app",
+      "content": "Apps can close in split screen when memory is low. Open Settings, tap Device care, tap Memory, and tap Clean now. Then open Settings, tap Advanced features, tap Labs, and turn on Multi window for all apps."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-12",
+    "query": "The always-on display shows the wrong battery percentage compared to the lock screen.",
+    "siis_response": {
+      "title": "Always On Display battery mismatch",
+      "content": "Restart the Always On Display to refresh its status information. Open Settings, tap Lock screen and AOD, tap Always On Display, turn it off, then turn it back on."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-13",
+    "query": "My phone won't charge past 80% since I turned on a battery protection feature I don't remember enabling.",
+    "siis_response": {
+      "title": "Charging stops at 80%",
+      "content": "Battery protection limits charging to 80%. Open Settings, tap Battery, tap Battery protection, and select Basic or turn protection off."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-14",
+    "query": "The screen recorder captures video but no system audio, only my microphone.",
+    "siis_response": {
+      "title": "Screen recorder has no media audio",
+      "content": "Open Settings, tap Advanced features, tap Screenshots and screen recordings, tap Screen recorder settings, tap Sound, and select Media sounds or Media sounds and mic."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-15",
+    "query": "Face unlock works in a bright room but fails constantly at night with the lights off.",
+    "siis_response": {
+      "title": "Face recognition fails in low light",
+      "content": "Turn on brighter screen for face recognition. Open Settings, tap Security and privacy, tap Biometrics, tap Face recognition, and turn on Brighten screen."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-16",
+    "query": "The app drawer icons rearrange themselves every time I restart the phone.",
+    "siis_response": {
+      "title": "App icons rearranging",
+      "content": "Apps screen sorting can reset the layout. Open the Apps screen, tap the three-dot menu, tap Sort, and select Custom order."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-17",
+    "query": "My phone's compass app always points about 30 degrees off from true north.",
+    "siis_response": {
+      "title": "Compass inaccurate",
+      "content": "Calibrate the compass by moving the phone in a figure-eight motion several times. Remove magnetic cases or mounts nearby."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-18",
+    "query": "The dual SIM phone only shows signal bars for one card even though both are active.",
+    "siis_response": {
+      "title": "Second SIM no signal",
+      "content": "Open Settings, tap Connections, tap SIM manager, and make sure both SIM cards are turned on. Then remove and reinsert the second SIM card."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-19",
+    "query": "My phone's NFC won't tap-to-pay anymore since I added a new bank card.",
+    "siis_response": {
+      "title": "NFC payments stopped working",
+      "content": "Open Settings, tap Connections, tap NFC and contactless payments, turn on NFC, then tap Contactless payments and select your payment app as the default."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S2-20",
+    "query": "The screen has a faint burn-in shadow of the navigation bar visible on white backgrounds.",
+    "siis_response": {
+      "title": "Screen burn-in",
+      "content": "Screen burn-in is permanent display damage that settings cannot repair. Contact an authorized service center to have the display inspected or replaced."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S3-21",
+    "query": "My Bluetooth headphones keep disconnecting AND the camera app crashes every time I open it.",
+    "siis_response": {
+      "title": "Bluetooth drops and camera crashes",
+      "content": "For Bluetooth drops, open Settings, tap Connections, tap Bluetooth, unpair the headphones, and pair them again. Separately, for camera crashes, open Settings, tap Apps, tap Camera, tap Storage, and tap Clear cache."
+    },
+    "expected": "multi"
+  },
+  {
+    "id": "S3-22",
+    "query": "The keyboard switches language randomly AND my notifications are delayed by minutes.",
+    "siis_response": {
+      "title": "Keyboard language and notification delays",
+      "content": "For language switching, open Settings, tap General management, tap Keyboard, tap Languages and types, and remove unused languages. Separately, for delayed notifications, open Settings, tap Apps, select the app, tap Battery, and choose Unrestricted."
+    },
+    "expected": "multi"
+  },
+  {
+    "id": "S3-23",
+    "query": "Face unlock fails constantly at night AND the phone overheats during video calls.",
+    "siis_response": {
+      "title": "Face unlock and overheating",
+      "content": "For face unlock at night, open Settings, tap Security and privacy, tap Biometrics, tap Face recognition, and turn on Brighten screen. Separately, for overheating on video calls, close background apps and open Settings, tap Battery, and turn on Power saving."
+    },
+    "expected": "multi"
+  },
+  {
+    "id": "S3-24",
+    "query": "Wi-Fi won't connect at my office AND the fingerprint sensor stopped working since the update.",
+    "siis_response": {
+      "title": "Wi-Fi and fingerprint issues",
+      "content": "For office Wi-Fi, open Settings, tap Connections, tap Wi-Fi, forget the network, and rejoin it. Separately, for the fingerprint sensor, open Settings, tap Security and privacy, tap Biometrics, tap Fingerprints, and re-register your fingerprint."
+    },
+    "expected": "multi"
+  },
+  {
+    "id": "S4-25",
+    "query": "Something feels off about my phone lately, it's just not working right.",
+    "siis_response": {
+      "title": "General performance issues",
+      "content": "Restart the phone and install the latest software update from Settings, Software update."
+    },
+    "expected": "any"
+  },
+  {
+    "id": "S4-26",
+    "query": "My phone screen is completely shattered and pieces of glass are falling off.",
+    "siis_response": {
+      "title": "Cracked screen",
+      "content": "A cracked or shattered screen requires hardware repair. Back up your data if possible and visit an authorized service center to replace the display."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S4-27",
+    "query": "I dropped my phone in a pool three days ago and now the speaker sounds crackly.",
+    "siis_response": {
+      "title": "Water damage to speaker",
+      "content": "Water exposure can damage the speaker. Do not charge the phone while wet. Visit an authorized service center for inspection."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S4-28",
+    "query": "My cat knocked my phone off the table and now the top-left corner of the screen doesn't respond to touch.",
+    "siis_response": {
+      "title": "Touch not responding in one area",
+      "content": "A touch dead zone after a drop usually indicates digitizer damage. Remove any screen protector, then visit an authorized service center if the area still does not respond."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S4-29",
+    "query": "asdkfj screen bad help pls",
+    "siis_response": {
+      "title": "Screen problems",
+      "content": "Restart the phone. If the screen still misbehaves, open Settings, tap Display, and check brightness and Motion smoothness."
+    },
+    "expected": "any"
+  },
+  {
+    "id": "S4-30",
+    "query": "My phone works fine but my smart watch paired to it keeps losing connection.",
+    "siis_response": {
+      "title": "Watch disconnecting",
+      "content": "Open the Wearable app, tap Watch settings, and reset the connection. Keep Bluetooth on and the phone within range."
+    },
+    "expected": "any"
+  },
+  {
+    "id": "S4-31",
+    "query": "Can you make my phone charge faster than what the charger supports?",
+    "siis_response": {
+      "title": "Fast charging",
+      "content": "Charging speed is limited by the charger and cable. Open Settings, tap Battery, tap More battery settings, and turn on Fast charging."
+    },
+    "expected": "any"
+  },
+  {
+    "id": "S4-32",
+    "query": "The phone is possessed, it turns on by itself at 3am every night and plays music.",
+    "siis_response": {
+      "title": "Phone turns on and plays sound at night",
+      "content": "Scheduled power on or an alarm can cause this. Open Settings, tap General management, tap Reset, tap Auto restart, and review scheduled times. Check the Clock app for alarms set around 3 AM."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S5-33",
+    "query": "My battery drains fully within 3 hours of normal use.",
+    "siis_response": {
+      "title": "Blurry camera photos",
+      "content": "Clean the rear camera lens with a soft cloth, then open the Camera app and reset camera settings."
+    },
+    "expected": "abstain"
+  },
+  {
+    "id": "S5-34",
+    "query": "The screen flickers when I open the camera app.",
+    "siis_response": {
+      "title": "Bluetooth pairing",
+      "content": "Open Settings, tap Connections, tap Bluetooth, and pair a new device from the list."
+    },
+    "expected": "abstain"
+  },
+  {
+    "id": "S5-35",
+    "query": "My phone won't connect to my car's Bluetooth anymore.",
+    "siis_response": {
+      "title": "Fingerprint registration",
+      "content": "Open Settings, tap Security and privacy, tap Biometrics, tap Fingerprints, and add a new fingerprint."
+    },
+    "expected": "abstain"
+  },
+  {
+    "id": "S6-36",
+    "query": "मेरा फ़ोन ब्राउज़ करते समय बहुत गर्म हो जाता है",
+    "siis_response": {
+      "title": "Device overheating during light use",
+      "content": "Overheating during light use is often caused by background apps or a high refresh rate. Open Settings, tap Battery, tap Background usage limits, and turn on Put unused apps to sleep. Then open Settings, tap Display, tap Motion smoothness, and select Standard."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S6-37",
+    "query": "블루투스가 차량과 몇 분마다 계속 연결이 끊어져요",
+    "siis_response": {
+      "title": "Bluetooth disconnects from car",
+      "content": "Repeated Bluetooth drops are usually fixed by re-pairing. Open Settings, tap Connections, tap Bluetooth, tap the gear icon next to the car, and tap Unpair. Then pair the car again from the car's menu."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S6-38",
+    "query": "El teclado cambia de idioma solo sin que yo haga nada",
+    "siis_response": {
+      "title": "Keyboard language switching",
+      "content": "The keyboard can switch languages when multiple languages are enabled. Open Settings, tap General management, tap Keyboard, tap Languages and types, and remove languages you do not use."
+    },
+    "expected": "plan"
+  },
+  {
+    "id": "S6-39",
+    "query": "mera phone ka screen baar baar flicker kar raha hai",
+    "siis_response": {
+      "title": "Screen flickering",
+      "content": "Screen flicker is often caused by the refresh rate setting. Open Settings, tap Display, tap Motion smoothness, and select Standard. Restart the phone if the flicker continues."
+    },
+    "expected": "plan"
+  }
+]

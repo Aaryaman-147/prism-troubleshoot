@@ -139,6 +139,11 @@ async def measure_paraphrase_hit_rate(index: DeeplinkIndex):
 
     hit_rate = hits / len(PARAPHRASES_TO_TEST) * 100
     print(f"\nHit rate: {hits}/{len(PARAPHRASES_TO_TEST)} = {hit_rate:.1f}%")
+    from pathlib import Path
+    Path("results").mkdir(exist_ok=True)
+    Path("results/independent_paraphrase.json").write_text(json.dumps(
+        {"hits": hits, "total": len(PARAPHRASES_TO_TEST), "rate_pct": round(hit_rate, 1)}), encoding="utf-8")
+    print("Saved results/independent_paraphrase.json (used by scripts/finalize_metrics.py)")
     if hit_rate >= 80:
         print(f"RESULT: MEETS the spec's >=80% target")
     else:
