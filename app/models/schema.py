@@ -4,7 +4,7 @@ Mirrors Appendix A (schema.py) from the theme spec — do not deviate
 from field names/types, since evaluation checks schema conformance directly.
 """
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Union, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -72,7 +72,12 @@ class Action(BaseModel):
     @field_validator("actionName")
     @classmethod
     def action_name_title_case(cls, v: str) -> str:
-        if v != v.title():
+        # Previously `v != v.title()`, which rejects acronyms: "Configure NFC
+        # Settings".title() == "Configure Nfc Settings" -> the WHOLE plan was
+        # discarded as validation_failed. Title Case = every word starts
+        # with a capital (or digit); the rest of the word is left alone.
+        bad = [w for w in v.split() if w[:1].isalpha() and not w[:1].isupper()]
+        if bad or not v.strip():
             raise ValueError(f"actionName must be Title Case, got: '{v}'")
         return v
 
@@ -136,9 +141,18 @@ class RetrievalOverrides(BaseModel):
     margin: Optional[float] = None
 
 
+class SiisPayload(BaseModel):
+    """Samsung's siis_responses.json ships siis_response as {"title","content"}
+    and its _readme says that object IS the POST payload. Previously the
+    API only accepted a string, so the official input shape would 422."""
+    model_config = {"extra": "allow"}
+    title: Optional[str] = ""
+    content: Optional[str] = ""
+
+
 class TroubleshootRequest(BaseModel):
     query: str
-    siis_response: Optional[str] = None
+    siis_response: Optional[Union[str, SiisPayload]] = None
     retrieval_overrides: Optional[RetrievalOverrides] = None
 
 
@@ -150,6 +164,16 @@ class ResponseMeta(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cache_similarity: Optional[float] = None
+    # SIIS relevance score (complaint vs reference). Previously written into
+    # cache_similarity on a mismatch, mislabeling it as a cache metric.
+    relevance_similarity: Optional[float] = None
+    # % of generated steps supported by the SIIS text (app/pipeline/grounding.py)
+    step_grounding_pct: Optional[float] = None
+    # Fingerprint of the content-affecting settings that produced this plan.
+    config_fingerprint: Optional[str] = None
+    # Fingerprint of the SIIS reference this plan was grounded in, so a
+    # pre-warmed plan is only reused for the SAME document.
+    reference_fp: Optional[str] = None
 
 
 class DeeplinkCandidate(BaseModel):
@@ -183,5 +207,12 @@ class TroubleshootResponse(BaseModel):
     # conformance grading, only demo/debug value.
     ambiguous_matches: List[AmbiguousMatch] = []
     deeplink_confidence: Dict[str, float] = {}
+    # actionName -> source sentence (or null) for each of its steps, in order.
+    # Wrapper-level only: never part of the spec-mirrored `response`.
+    step_sources: Dict[str, List[Optional[str]]] = {}
+    # Set when the complaint was not in English: the pipeline ran on
+    # `translated_query`; `query` keeps the customer's original words.
+    detected_language: Optional[str] = None
+    translated_query: Optional[str] = None
     is_multi_issue: bool = False
     detected_sub_issues: List[str] = []
