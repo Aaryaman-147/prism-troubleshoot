@@ -216,8 +216,6 @@ OPENROUTER_API_KEY=nvapi-...
 OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b
 ```
 
-macOS step-by-step, including cloning: [SETUP_MAC.md](SETUP_MAC.md).
-
 ## Run
 
 ```bash
