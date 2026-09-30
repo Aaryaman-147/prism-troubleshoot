@@ -53,7 +53,7 @@ Measured on Samsung's real files: 20 queries, 20 SIIS documents, and the
 | Human-rated deeplink relevance, Appendix C §2 (0–2, 16 plans) | **1.28**: 4 wrong screens found and analysed |
 | Deeplink mapping vs full-LLM baseline (Appendix C §5) | **0 wrong vs 13**, ~37× faster, 0 tokens |
 | 500 cached requests, 50 concurrent users | **500/500 hits, 0 errors, 338 req/s**, client P95 318 ms incl. HTTP |
-| Wrong deeplinks on labelled probes across all catalog domains | **0** (73 correct, 19 safe abstentions) |
+| Wrong deeplinks on labelled probes across all catalog domains | **0** (73 correct, 26 safe abstentions) |
 | All 577 catalog entries through the pipeline | 406 correct · 166 safe abstentions · 5 wrong (0.9%) · **0 opposite toggles** |
 | Auto actions linked to a real catalog screen (not the placeholder) | 45.1%: the price of 0 wrong links |
 | Cache hit rate on independently written paraphrases (≥ 80%) | **87.5%** (typos included) |
