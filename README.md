@@ -40,7 +40,6 @@ Given a complaint and, optionally, a SIIS reference document, the engine:
 
 Measured on Samsung's real files: 20 queries, 20 SIIS documents, and the
 578-entry catalog. Model: `nvidia/nemotron-3-super-120b-a12b` via NVIDIA's API.
-Details in [TESTING.md](TESTING.md).
 
 | Metric (spec target) | Measured |
 |---|---|
