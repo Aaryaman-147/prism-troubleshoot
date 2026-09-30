@@ -280,7 +280,7 @@ Coverage includes:
 ## Evaluation toolkit
 
 ```bash
-python scripts/batch_run.py --all                  # Samsung's 20 + 35 synthetic → results.jsonl + metrics.md
+python scripts/batch_run.py --all                  # Samsung's 20 + 39 synthetic → results.jsonl + metrics.md
 python scripts/ablation.py --llm                   # Appendix C §5: full-LLM vs hybrid vs rules-based
 python scripts/calibrate_retrieval.py --probes all --detail   # threshold sweep, labelled probes
 python scripts/calibrate_retrieval.py --catalog    # all 577 catalog entries through the pipeline
