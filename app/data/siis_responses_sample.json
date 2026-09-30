@@ -1,4 +1,0 @@
-{
-  "screen_flicker_battery": "Display flickering combined with rapid battery drain is commonly caused by adaptive brightness conflicting with a third-party app, or a stuck refresh-rate setting. First, open Settings > Display > Motion smoothness and set it to Standard instead of Adaptive. Second, open Settings > Battery > Background usage limits and check for apps consuming excess power. If the issue persists after 24 hours, a factory reset may be required as a last resort.",
-  "swipe_navigation_wrong": "After installing a new app, swipe gesture navigation can occasionally default to scroll-style movement instead of directional swipes. Open Settings > Display > Navigation bar and confirm Swipe gestures is selected rather than Buttons. Toggle Gesture hint on to display guidance lines at the bottom of the screen for confirmation."
-}
