@@ -1,0 +1,81 @@
+====================================================================================================
+PART 0  PREFLIGHT
+====================================================================================================
+embedding model setting : all-MiniLM-L6-v2
+sanity: related pair 0.785  vs unrelated pair 0.000  (looks like a real model)
+thresholds              : hit=0.75  near_miss=0.7  with_siis=0.9
+config fingerprint      : 3a0eee08a1
+warm file               : app\data\cache_warm.jsonl  exists=True  rows=59
+warm file fingerprints  : {'3a0eee08a1': 56, None: 3}   (must equal 3a0eee08a1 or every row is skipped as stale)
+rows carrying reference_fp: 56/59  (0 => BUG-001 fix cannot recognise their document)
+[cache warm-up] app/data/cache_warm.jsonl: {'loaded': 56, 'skipped_fallback': 3, 'skipped_stale': 0, 'skipped_config': 0, 'skipped_cache_hit': 0, 'skipped_duplicate': 0, 'invalid': 0}
+warm-up result          : {'loaded': 56, 'skipped_fallback': 3, 'skipped_stale': 0, 'skipped_config': 0, 'skipped_cache_hit': 0, 'skipped_duplicate': 0, 'invalid': 0}
+clusters in cache       : 56   with reference_fp: 56
+
+====================================================================================================
+PART A  PAIRWISE SIMILARITY of the 20 visible queries (reference-less path)
+====================================================================================================
+  pairs with similarity >= 0.70: 16
+  pairs with similarity >= 0.75: 6
+  pairs with similarity >= 0.80: 3
+  pairs with similarity >= 0.85: 1
+  pairs with similarity >= 0.90: 0
+
+  Pairs >= 0.75: each such query would be served the OTHER query's cached plan
+  when no siis_response is sent. JUDGE THESE BY EYE: is the plan right for both complaints?
+
+  0.858  [row_9] My Nexa Fold X1 inner screen stopped working by itself; it shows no image and…
+         [row_19] My Nexa Fold X1 screen is cracked again right where it folds." 2. "The touch …
+         plans: 'Inner screen failure'  vs  '<not in cache>'
+  0.843  [row_3] My Nexa Fold X1 screen went completely black, so I can't see or interact with…
+         [row_17] My Nexa X1 screen goes completely blank, just a dark screen with occasional s…
+         plans: 'Black screen recovery'  vs  '<not in cache>'
+  0.820  [row_15] My Nexa X1 Ultra only shows a blue (or black) screen with tiny text when I tr…
+         [row_22] My Nexa X1 Ultra screen is completely black and won't turn on, even though th…
+         plans: 'Device not turning'  vs  'Black screen issue'
+  0.773  [row_3] My Nexa Fold X1 screen went completely black, so I can't see or interact with…
+         [row_11] My Nexa Fold X1 screen is half black—one side of the display is completely da…
+         plans: 'Black screen recovery'  vs  'Half black screen'
+  0.763  [row_11] My Nexa Fold X1 screen is half black—one side of the display is completely da…
+         [row_19] My Nexa Fold X1 screen is cracked again right where it folds." 2. "The touch …
+         plans: 'Half black screen'  vs  '<not in cache>'
+  0.758  [row_5] My tablet screen stays completely blank when I try to use Data Transfer to sc…
+         [row_17] My Nexa X1 screen goes completely blank, just a dark screen with occasional s…
+         plans: 'Blank screen'  vs  '<not in cache>'
+
+====================================================================================================
+PART B  BUG-001  query_i + SIIS document_j through POST /v1/troubleshoot
+====================================================================================================
+  visible queries that share an identical SIIS document with another query: 13 (groups: [['row_2', 'row_4', 'row_13', 'row_15', 'row_16', 'row_22'], ['row_3', 'row_11', 'row_17'], ['row_7', 'row_12'], ['row_14', 'row_19']])
+  ...query 1/20 done  ...query 2/20 done  ...query 3/20 done  ...query 4/20 done  ...query 5/20 done  ...query 6/20 done  ...query 7/20 done  ...query 8/20 done  ...query 9/20 done  ...query 10/20 done  ...query 11/20 done  ...query 12/20 done  ...query 13/20 done  ...query 14/20 done  ...query 15/20 done  ...query 16/20 done  ...query 17/20 done  ...query 18/20 done  ...query 19/20 done  ...query 20/20 done
+  cross-document requests (different SIIS text): 340
+  GUARD FAILURES (served a plan grounded in a DIFFERENT document than the one supplied): 0   -> PASS
+  SAME-DOCUMENT SIBLING HITS (allowed by design: supplied doc == cluster's doc AND sim >= 0.9): 0
+     Judge these by eye: query_i is a DIFFERENT complaint that happens to share a SIIS document with the cached plan.
+  own-document requests served from cache: 20/20
+  LLM calls blocked (= requests that would have gone to the 9-13 s cold path): 554
+
+====================================================================================================
+PART C  PROBES (reference-less lookup: cache.lookup)
+====================================================================================================
+  status       sim  probe  ->  matched plan  (matched cluster's canonical query)
+  hit        0.762  "my foldable's inner display went completely b…"  ->  Half black screen  (My Nexa Fold X1 screen is half black—one side of …)
+  near_miss  0.705  'screen stays dark but the phone still vibrates'  ->  Black screen issue  (My TechCorp Nexa A14/A15 screen suddenly went com…)
+  miss       0.683  'tablet display is blank after I turned it on'  ->  -  (-)
+  near_miss  0.716  'half of my phone screen is black'  ->  Black screen issue  (My TechCorp Nexa A14/A15 screen suddenly went com…)
+  hit        0.767  'scren flickers n batt dies fast'  ->  Screen flickering  (mera phone ka screen baar baar flicker kar raha h…)
+  hit        0.878  'screen black'  ->  Black screen issue  (My TechCorp Nexa A14/A15 screen suddenly went com…)
+  miss       0.536  'display broken lines'  ->  -  (-)
+  near_miss  0.726  'touch not working'  ->  Touch dead zone  (My cat knocked my phone off the table and now the…)
+  miss       0.448  'battery drains overnight while idle'  ->  -  (-)
+  miss       0.671  'camera app crashes when I open it'  ->  -  (-)
+  miss       0.580  'phone got slow after the update'  ->  -  (-)
+  hit        0.777  'screen flickers and the battery dies fast'  ->  Screen flickering  (mera phone ka screen baar baar flicker kar raha h…)
+  miss       0.147  'how do I bake sourdough bread'  ->  -  (-)
+  miss       0.372  'asdfghjkl'  ->  -  (-)
+  miss       0.150  'what is the capital of France'  ->  -  (-)
+
+(Full output also saved to verify_report.txt)
+
+Done. Save this output; the numbers that matter: Part B 'hits on a different document' (must be 0),
+Part B own-document rate, Part A pairs you judge wrong, and Part D 'WRONG hit' column at 0.75.
