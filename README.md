@@ -294,10 +294,6 @@ python scripts/finalize_metrics.py                 # complete Appendix C metrics
   separately.
 - To pre-warm the cache, copy a fresh `results.jsonl` to
   `app/data/cache_warm.jsonl`.
-- Plus: [GLOSSARY.md](GLOSSARY.md) (plain-language terms) and
-  [REVIEW_GUIDE.md](REVIEW_GUIDE.md) (manual scoring rubric).
-
-Every spec requirement, where it's enforced, and the evidence: [SPEC_COMPLIANCE.md](SPEC_COMPLIANCE.md).
 
 ## Known limitations
 
