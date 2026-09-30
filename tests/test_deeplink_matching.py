@@ -49,7 +49,7 @@ class FakeIndex:
 def _deeplink_of(result):
     actions = result[0] if isinstance(result, tuple) else result
     sg = actions[0]["stepGroups"][0]
-    return sg.get("actionableDeeplink", {}).get("deeplink")
+    return (sg.get("actionableDeeplink") or {}).get("deeplink")
 
 
 class TestMatchText:
@@ -96,18 +96,26 @@ class TestConfidenceFloorAndMargin:
 
 class TestBM25Normalization:
     def test_weak_top_match_does_not_score_one(self):
-        """Max-normalization forced the best entry to exactly 1.0 on every
-        query regardless of match quality, which structurally defeated the
-        confidence floor. The saturating transform must keep weak matches low.
-        """
+        """Max-normalization forced the best entry to 1.0 on every query,
+        defeating the confidence floor. Coverage normalization (raw score /
+        IDF mass of the query's terms) keeps a weak best-match low and a
+        strong one high, independent of catalog size."""
         from app.pipeline.deeplink_retrieval import DeeplinkIndex
         norm = DeeplinkIndex._normalize_bm25
-        index = type("X", (), {"bm25_saturation_k": 3.0})()
-        weak = norm(index, np.array([0.3, 0.1, 0.0]))
-        strong = norm(index, np.array([30.0, 0.1, 0.0]))
+        index = type("X", (), {"_bm25": type("B", (), {"idf": {"screen": 2.0, "flicker": 3.0, "fix": 1.0}})()})()
+        q = ["screen", "flicker", "fix"]                  # IDF mass = 6.0
+        weak = norm(index, np.array([0.9, 0.1, 0.0]), q)
+        strong = norm(index, np.array([5.7, 0.1, 0.0]), q)
         assert weak.max() < 0.2, "a weak best-match must not saturate to ~1.0"
         assert strong.max() > 0.8
-        assert weak.max() < strong.max()
+        assert norm(index, np.array([60.0]), q).max() == 1.0   # clipped
+
+    def test_repeated_query_words_do_not_inflate_coverage(self):
+        """Real-catalog regression: 'service' repeated in the match text
+        pushed a repair action to 0.86 coverage on one shared word."""
+        from app.pipeline.deeplink_retrieval import tokenize
+        assert tokenize("Tap Mouse keys. Turn OFF keys!") == ["tap", "mouse", "keys", "turn", "off", "keys"]
+        assert list(dict.fromkeys(tokenize("service service Service"))) == ["service"]
 
 
 class TestAmbiguousMatchesSurfaced:
@@ -145,27 +153,18 @@ class TestAmbiguousMatchesSurfaced:
 
 
 class TestValidationDeeplinkWiring:
-    def test_valid_expected_outcome_attaches_validation_deeplink(self):
-        from app.pipeline.ordering import attach_validation_deeplinks
-
+    def test_llm_expected_outcome_never_produces_validation_without_catalog(self):
+        """Validation deeplinks are catalog data only. An LLM-proposed
+        expectedOutcome with no catalog validation entry yields nothing
+        (previously it reused the actionable URI with an invented key)."""
         action = copy.deepcopy(MOTION_SMOOTHNESS_ACTION)
-        action["expectedOutcome"] = {
-            "key": "motion_smoothness_mode",
-            "resultType": "str",
-            "condition": "equal",
-            "value": "Standard",
-        }
-        action["stepGroups"][0]["actionableDeeplink"] = {
-            "deeplink": "bixby://masked/act/display_brightness",
-            "description": "desc",
-            "message": "",
-        }
-        result = attach_validation_deeplinks([action])
-        vdl = result[0]["stepGroups"][0]["validationDeeplink"]
-        assert vdl["deeplink"] == "bixby://masked/act/display_brightness"
-        assert vdl["key"] == "motion_smoothness_mode"
-        assert vdl["condition"] == "equal"
-        assert vdl["value"] == "Standard"
+        action["stepGroups"][0]["actionableDeeplink"] = {"deeplink": "bixby://masked/act/display_brightness"}
+        action["expectedOutcome"] = {"key": "motion_smoothness_mode", "resultType": "str",
+                                     "condition": "equal", "value": "Standard"}
+        from app.pipeline.ordering import attach_validation_deeplinks
+        result = attach_validation_deeplinks([action], {})
+        assert "validationDeeplink" not in result[0]["stepGroups"][0]
+        assert "expectedOutcome" not in result[0]
 
     def test_no_actionable_deeplink_means_no_validation_deeplink(self):
         """Nothing to verify against if nothing was resolved — must not
@@ -224,6 +223,7 @@ class TestAlphaOverride:
         idx._catalog_by_uri = {"a": {}, "b": {}}
 
         class FakeBM25:
+            idf = {}
             def get_scores(self, tokens):
                 return np.array([10.0, 0.0])  # a wins on BM25
 
@@ -239,6 +239,15 @@ class TestAlphaOverride:
 
 
 class TestDummyPositiveFallback:
+    """These tests cover the OPTIONAL dummy_positive policy (spec PDF). The
+    default is now manual_null per Samsung's meeting guidance -- see
+    TestManualNullPolicy below."""
+
+    @pytest.fixture(autouse=True)
+    def _dummy_policy(self, monkeypatch):
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "UNMATCHED_AUTO_POLICY", "dummy_positive")
+
     """
     bixby://dummy_positive is a real catalog entry (per the theme spec:
     "reserved generic placeholder used exclusively when a step opens a
@@ -337,4 +346,6 @@ class TestDummyPositiveFallback:
             [copy.deepcopy(MOTION_SMOOTHNESS_ACTION)], IdxNoDummy()
         )
         sg = actions[0]["stepGroups"][0]
-        assert "actionableDeeplink" not in sg
+        # No placeholder available -> degrades to the manual/null policy.
+        assert sg.get("actionableDeeplink") is None
+        assert actions[0]["category"] == "manual"

@@ -124,9 +124,16 @@ async def test_cold_path_returns_validated_ordered_plan_and_caches_it(fresh_cach
     assert result.response.fallback is None
     assert len(result.response.contexts) == 1
     # Ordering contract: destructive actions must come last.
+    # FakeDeeplinkIndex never matches, so per Samsung's rule ("no relevant
+    # deeplink -> null + manual") the auto action is downgraded to manual.
+    # Destructive actions must still come last.
     categories = [a.category.value for a in result.response.contexts[0].actions]
-    assert categories == ["auto", "critical"]
-    assert result.query_variations == VALID_ENRICHMENT[0]["query_variations"]
+    assert categories == ["manual", "critical"]
+    # The model's own paraphrases come first; the spec's 8-10 minimum is then
+    # met by deterministic variants in the spec's registers.
+    enriched = VALID_ENRICHMENT[0]["query_variations"]
+    assert result.query_variations[:len(enriched)] == enriched
+    assert 8 <= len(result.query_variations) <= 10
     assert fresh_cache.stats()["num_clusters"] == 1
 
 
@@ -176,7 +183,12 @@ async def test_enrichment_failure_does_not_discard_a_good_extraction(fresh_cache
 
     assert result.response.fallback is None
     assert len(result.response.contexts) == 1
-    assert result.query_variations == ["my screen keeps flickering"]
+    # Enrichment failed, so there are no real paraphrases; the raw query is
+    # not reported back as its own "paraphrase".
+    # No model paraphrases, but the spec still requires 8-10: deterministic
+    # variants in the spec's registers, never the raw query itself.
+    assert 8 <= len(result.query_variations) <= 10
+    assert "my screen keeps flickering" not in [v.lower() for v in result.query_variations]
 
 
 @pytest.mark.asyncio

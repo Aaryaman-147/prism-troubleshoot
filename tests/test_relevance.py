@@ -138,3 +138,33 @@ class TestFallbackReasonSurfacing:
         assert result.response.fallback == "siis_mismatch"
         assert result.response.fallback_reason is not None
         assert "reference material" in result.response.fallback_reason.lower()
+
+
+class TestClauseLevelRelevance:
+    """
+    A multi-issue complaint embeds as an average of its topics. If the
+    reference covers only ONE sub-issue, the whole-complaint score is
+    diluted -- clause-level max scoring prevents wrongly rejecting a
+    reference that genuinely addresses part of the complaint.
+    """
+
+    def test_reference_covering_one_subissue_passes_via_clause(self):
+        complaint = "my battery drains fast and the swipe gestures go the wrong way"
+        reference = "Swipe gesture navigation can default to scroll-style movement after installing a new app."
+        # Strict threshold: the diluted whole-complaint score fails it,
+        # but the swipe-gesture clause alone clears it.
+        result = verify_relevance(complaint, reference, min_similarity=0.7)
+        assert result.is_relevant is True
+        assert "swipe" in result.best_match_text.lower()
+
+    def test_fully_unrelated_multi_issue_complaint_still_rejected(self):
+        """Clause splitting must not make genuine mismatches pass."""
+        complaint = "my camera app crashes and storage is always full now"
+        reference = "Swipe gesture navigation can default to scroll-style movement after installing a new app."
+        result = verify_relevance(complaint, reference, min_similarity=0.25)
+        assert result.is_relevant is False
+
+    def test_short_fragments_are_not_scored_as_clauses(self):
+        from app.pipeline.relevance import _clauses
+        # "my phone" (2 words) is too short to be a meaningful clause
+        assert _clauses("my phone, the battery drains quickly overnight") == ["the battery drains quickly overnight"]
