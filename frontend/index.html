@@ -39,10 +39,22 @@
         Swipe gestures wrong
       </button>
       <button class="example-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
+        data-query="मेरा फ़ोन ब्राउज़ करते समय बहुत गर्म हो जाता है"
+        data-reference="Overheating during light use is often caused by background apps or a high refresh rate. Open Settings, tap Battery, tap Background usage limits, and turn on Put unused apps to sleep. Then open Settings, tap Display, tap Motion smoothness, and select Standard.">
+        Hindi complaint
+      </button>
+      <button class="example-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
         data-query="my screen flickers and storage is full"
         data-reference="Display flickering is commonly caused by a stuck refresh-rate setting — open Settings, then Display, then Motion smoothness, and set it to Standard. Separately, storage running full can be resolved by opening Settings, then Storage, then reviewing and clearing cached app data.">
         Two distinct issues
       </button>
+    </div>
+
+    <div class="mt-3 flex items-center gap-2">
+      <span class="text-xs text-slate-400">Samsung's real queries:</span>
+      <select id="samsungExample" class="text-xs border border-slate-300 rounded px-2 py-1 max-w-md">
+        <option value="">(load one of the 20 official examples)</option>
+      </select>
     </div>
 
     <label class="block text-sm font-medium text-slate-700 mt-4 mb-1.5">Reference text <span class="text-slate-400 font-normal">(optional — leave blank to test cache-only lookup)</span></label>
@@ -78,9 +90,9 @@
       </div>
       <div>
         <div class="flex justify-between text-xs text-slate-600 mb-1">
-          <span>Confidence floor</span><span id="minConfVal" class="font-mono">0.00</span>
+          <span>Confidence floor</span><span id="minConfVal" class="font-mono">0.50</span>
         </div>
-        <input type="range" id="minConfidence" min="0" max="1" step="0.05" value="0" class="w-full">
+        <input type="range" id="minConfidence" min="0" max="1" step="0.05" value="0.5" class="w-full">
         <div class="flex justify-between text-[10px] text-slate-400 mt-0.5"><span>always guess</span><span>very strict</span></div>
       </div>
       <div>
@@ -123,10 +135,42 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+let SAMSUNG_EXAMPLES = [];
+async function loadSamsungExamples() {
+  try {
+    const apiBase = $('apiBase').value.trim().replace(/\/$/, '');
+    SAMSUNG_EXAMPLES = await (await fetch(`${apiBase}/v1/examples`)).json();
+    const sel = $('samsungExample');
+    SAMSUNG_EXAMPLES.forEach((ex, i) => {
+      const o = document.createElement('option');
+      o.value = i;
+      // Samsung's file skips row_6 and row_18, so number 1-20 and show their id alongside.
+      o.textContent = `${i + 1}. [${ex.id}] ${ex.query.slice(0, 64)}${ex.query.length > 64 ? '…' : ''}`;
+      sel.appendChild(o);
+    });
+  } catch { /* API down: picker stays empty */ }
+}
+
+function renderRawJson(data) {
+  const json = escapeHtml(JSON.stringify(data, null, 2));
+  return `
+    <details class="mt-4">
+      <summary class="text-xs text-slate-500 cursor-pointer select-none">View raw JSON response (spec format)</summary>
+      <div class="mt-2 relative">
+        <button onclick="navigator.clipboard.writeText(JSON.stringify(window.__lastResponse, null, 2))"
+          class="absolute right-2 top-2 text-[10px] bg-slate-700 text-white px-2 py-0.5 rounded">copy</button>
+        <pre class="text-[11px] bg-slate-900 text-slate-100 rounded p-3 overflow-x-auto max-h-96">${json}</pre>
+      </div>
+    </details>`;
+}
+
 function renderLatencyBadge(meta) {
   const isFast = meta.cache_hit;
-  const color = isFast ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
-  const label = isFast ? 'CACHE HIT' : 'LLM CALL';
+  // siis_mismatch / no_siis_context return before any LLM call (0 tokens):
+  // don't label them "LLM CALL".
+  const noLlm = !isFast && !meta.prompt_tokens && !meta.completion_tokens;
+  const color = isFast ? 'bg-emerald-100 text-emerald-700' : noLlm ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-700';
+  const label = isFast ? 'CACHE HIT' : noLlm ? 'NO LLM CALL' : 'LLM CALL';
   const tokenInfo = (!isFast && (meta.prompt_tokens || meta.completion_tokens))
     ? `<span class="text-slate-400">·</span><span class="text-slate-500">${meta.prompt_tokens}+${meta.completion_tokens} tokens</span>`
     : '';
@@ -138,10 +182,11 @@ function renderLatencyBadge(meta) {
       <span class="text-slate-500">${escapeHtml(meta.model)}</span>
       ${meta.cache_similarity != null ? `<span class="text-slate-400">·</span><span class="text-slate-500">similarity ${meta.cache_similarity.toFixed(3)}</span>` : ''}
       ${tokenInfo}
+      ${meta.step_grounding_pct != null ? `<span class="text-slate-400">·</span><span class="text-slate-500">${meta.step_grounding_pct}% of steps grounded in reference</span>` : ''}
     </div>`;
 }
 
-function renderAction(action, ambiguousByName, confidenceByName) {
+function renderAction(action, ambiguousByName, confidenceByName, sourcesByName) {
   const categoryColor = {
     auto: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     manual: 'bg-slate-50 text-slate-600 border-slate-200',
@@ -174,7 +219,7 @@ function renderAction(action, ambiguousByName, confidenceByName) {
       </button>
       <div class="text-[10px] text-slate-400 mt-0.5">
         matched${confidence != null ? ` · confidence ${confidence.toFixed(2)}` : ''}
-        ${validation ? ` · verifies: ${escapeHtml(validation.key)} ${escapeHtml(validation.condition)} ${escapeHtml(validation.value)}` : ''}
+
       </div>`;
   } else {
     linkBlock = `<p class="text-xs text-slate-400 italic">No direct settings link for this step</p>`;
@@ -188,13 +233,22 @@ function renderAction(action, ambiguousByName, confidenceByName) {
       </div>
       <p class="text-xs text-slate-500 mb-3">${escapeHtml(action.description)}</p>
       <ol class="text-sm space-y-1 mb-3 list-decimal list-inside text-slate-700">
-        ${steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+        ${steps.map((s, i) => {
+          const src = (sourcesByName?.[action.actionName] || [])[i];
+          const srcLine = sourcesByName?.[action.actionName] === undefined ? '' : (src
+            ? `<div class="text-[11px] text-slate-400 italic ml-4 mt-0.5">source: “${escapeHtml(src)}”</div>`
+            : `<div class="text-[11px] text-amber-600 ml-4 mt-0.5">no matching sentence in the reference text</div>`);
+          return `<li>${escapeHtml(s)}${srcLine}</li>`;
+        }).join('')}
       </ol>
       ${linkBlock}
+      ${validation ? `<div class="mt-2 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+        &#10003; Verification: after the fix, the device checks <b>${escapeHtml(validation.key)}</b>${
+          validation.condition && validation.value != null ? ` ${escapeHtml(validation.condition)} <b>${escapeHtml(validation.value)}</b>` : ''}</div>` : ''}
     </div>`;
 }
 
-function renderPlanCard(goal, index, total, ambiguousByName, confidenceByName) {
+function renderPlanCard(goal, index, total, ambiguousByName, confidenceByName, sourcesByName) {
   const multiLabel = total > 1
     ? `<span class="text-[10px] font-medium bg-slate-900 text-white px-1.5 py-0.5 rounded mr-2">ISSUE ${index + 1} OF ${total}</span>`
     : '';
@@ -206,7 +260,7 @@ function renderPlanCard(goal, index, total, ambiguousByName, confidenceByName) {
       </div>
       <p class="text-xs text-slate-400 mb-4">confidence ${(goal.score * 100).toFixed(0)}%</p>
       <div class="space-y-3">
-        ${goal.actions.map(a => renderAction(a, ambiguousByName, confidenceByName)).join('')}
+        ${goal.actions.map(a => renderAction(a, ambiguousByName, confidenceByName, sourcesByName)).join('')}
       </div>
     </div>`;
 }
@@ -243,17 +297,28 @@ function renderResult(data) {
   return `
     <div class="bg-white border border-slate-200 rounded-lg p-5">
       ${renderLatencyBadge(data.meta)}
+      ${data.detected_language ? `<div class="mt-3 text-xs bg-violet-50 border border-violet-200 text-violet-800 rounded px-2 py-1.5">
+        Complaint detected as <b>${escapeHtml(data.detected_language)}</b>; translated to English for matching: “${escapeHtml(data.translated_query || '')}”</div>` : ''}
       <div class="mt-3">${multiIssueBanner}</div>
-      ${contexts.map((goal, i) => renderPlanCard(goal, i, contexts.length, ambiguousByName, confidenceByName)).join('')}
+      ${contexts.map((goal, i) => renderPlanCard(goal, i, contexts.length, ambiguousByName, confidenceByName, data.step_sources && Object.keys(data.step_sources).length ? data.step_sources : undefined)).join('')}
     </div>`;
 }
 
+// Must match the backend defaults (DEEPLINK_ALPHA / DEEPLINK_MIN_CONFIDENCE /
+// DEEPLINK_MARGIN). The confidence slider used to default to 0.00, so every
+// frontend request silently disabled the confidence floor ("always guess").
+let TUNING_DEFAULTS = { alpha: 0.75, min_confidence: 0.6, margin: 0.02 };  // replaced from /v1/config on load
+
 function getRetrievalOverrides() {
-  return {
+  const current = {
     alpha: parseFloat($('alpha').value),
     min_confidence: parseFloat($('minConfidence').value),
     margin: parseFloat($('margin').value),
   };
+  // Only send overrides when a slider actually moved: changed overrides
+  // bypass the cache (so tuning is visible), unchanged ones must not.
+  const changed = Object.keys(current).some(k => Math.abs(current[k] - TUNING_DEFAULTS[k]) > 1e-9);
+  return changed ? current : null;
 }
 
 async function submitQuery() {
@@ -276,8 +341,9 @@ async function submitQuery() {
   try {
     const body = {
       query,
-      retrieval_overrides: getRetrievalOverrides(),
     };
+    const overrides = getRetrievalOverrides();
+    if (overrides) body.retrieval_overrides = overrides;
     if (siisResponse) body.siis_response = siisResponse;
 
     const resp = await fetch(`${apiBase}/v1/troubleshoot`, {
@@ -296,7 +362,8 @@ async function submitQuery() {
     }
 
     const data = await resp.json();
-    resultArea.innerHTML = renderResult(data);
+    window.__lastResponse = data;
+    resultArea.innerHTML = renderResult(data) + renderRawJson(data);
     refreshCacheStats();
 
     const numIssues = (data.response.contexts || []).length;
@@ -396,11 +463,29 @@ function updateSliderLabels() {
 ['alpha', 'minConfidence', 'margin'].forEach(id => {
   $(id).addEventListener('input', updateSliderLabels);
 });
-$('resetTuningBtn').addEventListener('click', () => {
-  $('alpha').value = 0.5;
-  $('minConfidence').value = 0;
-  $('margin').value = 0.05;
+function applyTuningDefaults() {
+  $('alpha').value = TUNING_DEFAULTS.alpha;
+  $('minConfidence').value = TUNING_DEFAULTS.min_confidence;
+  $('margin').value = TUNING_DEFAULTS.margin;
   updateSliderLabels();
+}
+$('resetTuningBtn').addEventListener('click', applyTuningDefaults);
+
+async function loadBackendDefaults() {
+  try {
+    const apiBase = $('apiBase').value.trim().replace(/\/$/, '');
+    const cfg = await (await fetch(`${apiBase}/v1/config`)).json();
+    TUNING_DEFAULTS = { alpha: cfg.alpha, min_confidence: cfg.min_confidence, margin: cfg.margin };
+  } catch { /* keep built-in defaults if the API is down */ }
+  applyTuningDefaults();
+}
+loadBackendDefaults();
+loadSamsungExamples();
+$('samsungExample').addEventListener('change', (e) => {
+  const ex = SAMSUNG_EXAMPLES[e.target.value];
+  if (!ex) return;
+  $('query').value = ex.query;
+  $('siis_response').value = ex.siis_text;
 });
 
 $('submitBtn').addEventListener('click', submitQuery);
