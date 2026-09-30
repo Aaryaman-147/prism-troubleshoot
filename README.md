@@ -226,7 +226,7 @@ Or with Docker (reads `.env` at container creation; `app/data` is mounted):
 docker compose -f docker/docker-compose.yml up --build --force-recreate
 ```
 
-Check the provider from inside the server: `curl http://localhost:8000/health`
+Check the server is up: `curl http://localhost:8000/health` → `{"status":"ok"}
 
 ## Try it
 
