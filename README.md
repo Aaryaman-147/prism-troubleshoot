@@ -310,7 +310,7 @@ python scripts/finalize_metrics.py                 # complete Appendix C metrics
   English words, so a very short non-English complaint may be treated as
   English.
 - **Samsung's sample output breaks its own 5–7 word rule** (9- and 12-word
-  descriptions). We follow the spec text (§4.1, Appendix C) and enforce 5–7.
+  descriptions). We follow the spec text (4.1, Appendix C) and enforce 5–7.
 - **Placeholder links are common.** Of auto actions, the share with a *real*
   catalog screen (not `dummy_positive`) is reported separately in metrics §1:
   the confidence floor trades links for zero wrong screens.
