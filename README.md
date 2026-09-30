@@ -185,9 +185,6 @@ All four phases of Samsung's roadmap are complete:
 - **Phase 3:** semantic caching, persistent pre-warmed variations and latency benchmarks.
 - **Phase 4:** REST API, graceful fallbacks and a concurrency stress test.
 
-The item-by-item mapping, including every pitfall, both Appendix templates
-and the edge cases we added, is in [SPEC_COMPLIANCE.md](SPEC_COMPLIANCE.md).
-
 ## Tech stack
 
 - **API**: FastAPI (async), Pydantic
