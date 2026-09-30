@@ -23,20 +23,14 @@ from reference support text. Follow the schema EXACTLY.
 Complaint: "{complaint}"
 Reference text: "{reference}"
 
-MULTI-ISSUE HANDLING: "contexts" is a list and MAY contain more than one \
-entry, but only for genuinely DISTINCT issues with different root causes \
-and different fixes in the reference text — not for one issue that happens \
-to produce multiple symptoms. Test: if fixing the first context's actions \
-would ALSO resolve the second symptom, it's one issue, not two. Example: \
-"screen flickers and the battery dies fast" is normally ONE context — a \
-single display/refresh-rate setting commonly causes both symptoms together \
-(check whether the reference text describes them as one root cause before \
-splitting). Only split when the reference text itself describes separate, \
-independent causes (e.g. a display bug AND an unrelated storage-full \
-warning in the same complaint). Return AT MOST 2 contexts even if you \
-perceive more than 2 distinct issues — merge the least distinct pair \
-rather than fragmenting further; over-splitting one issue into several is \
-a worse failure than under-splitting two into one.
+MULTI-ISSUE HANDLING: "contexts" holds ONE entry per distinct PROBLEM THE \
+USER REPORTED -- never one per possible cause or per fix. If the reference \
+text lists several possible causes or fixes for a single reported problem \
+(e.g. "clean the lens" AND "reset camera settings" for blurry photos), \
+those are several ACTIONS inside ONE context. Use a second context only \
+when the user reported two different problems (e.g. "screen flickers AND \
+storage is full"), and only if the reference text covers both. At most 2 \
+contexts. Over-splitting one problem is a worse failure than merging two.
 
 Rules (violating any of these will cause the output to be rejected):
 - goal: exact syntax "Follow these steps to perform this <Topic> Troubleshooting" \
@@ -46,11 +40,20 @@ Rules (violating any of these will cause the output to be rejected):
 - actionName: Title Case, one physical screen/feature per action
 - description: MUST be EXACTLY 5, 6, or 7 words (count carefully before \
   responding), MUST start with the exact text "It will", explains the \
-  concrete benefit in plain language
+  concrete benefit in plain language. Right: "It will identify any physical \
+  damage" (7). Wrong: "It will identify damage" (4, too short). The part \
+  AFTER "It will" must be 3 to 5 words
+- Every action must contain its COMPLETE path of steps (e.g. "Open Settings.", \
+  "Tap Display.", "Tap Navigation bar.", "Select Swipe gestures."). Never create \
+  an action that only opens a menu -- navigation belongs inside the action \
+  that uses it
 - stepGroups[].steps: imperative UI steps, one physical interaction per step, \
   NO urls or links
-- category: "auto" (safe, reachable via deeplink), "manual" (physical action, \
-  no deeplink), or "critical" (destructive/irreversible - order these last)
+- category (Samsung's definitions): "auto" = a standard Settings screen \
+  reachable via deeplink; "manual" = a physical intervention (cleaning ports, \
+  replacing hardware, visiting a service center); "critical" = a disruptive \
+  or irreversible operation, e.g. factory reset, RESTART, firmware/software \
+  update, SAFE MODE -- always ordered last
 - Do NOT invent deeplinks here - leave actionableDeeplink/validationDeeplink \
   absent, they are resolved in a later stage
 - OPTIONAL: for an "auto" action with an obvious, checkable resulting state \
@@ -84,23 +87,40 @@ Return ONLY valid JSON matching this shape, no markdown fences, no preamble:
     }}
   ]
 }}
-Remember: "contexts" holds ONE entry per DISTINCT issue per the test above \
--- add a second object to the array, same shape, only when genuinely \
-warranted. Do not add a second entry for a single issue with multiple \
-symptoms."""
+Remember: one context per reported problem; multiple causes/fixes of the \
+same problem are multiple actions in that one context."""
 
 
-def extract_structure(complaint: str, reference: str = "") -> tuple[dict, TokenUsage]:
+SUB_ISSUES_HINT_TEMPLATE = """
+
+ADDITIONAL CONTEXT: a separate analysis identified {n} distinct problems in \
+this complaint: {issues}. Produce ONE context per listed problem, using only \
+the parts of the reference text relevant to each. If the reference text does \
+not cover one of them, omit that context rather than inventing steps."""
+
+
+def _build_prompt(complaint: str, reference: str, sub_issues: list[str] | None = None) -> str:
     prompt = EXTRACTION_PROMPT.format(complaint=complaint, reference=reference)
-    # 3200, up from 2200: a genuine 2-issue response is roughly double the
-    # size of a 1-issue one (full second goal/actions/stepGroups block).
-    # This is the same lesson as an earlier truncation bug this session --
-    # adding output-size-increasing prompt content without raising the
-    # token budget to match produces truncated, unparseable JSON.
-    return generate_json(prompt, max_output_tokens=3200)
+    if sub_issues and len(sub_issues) >= 2:
+        prompt += SUB_ISSUES_HINT_TEMPLATE.format(
+            n=len(sub_issues), issues=", ".join(f'"{i}"' for i in sub_issues))
+    return prompt
 
 
-async def extract_structure_async(complaint: str, reference: str = "") -> tuple[dict, TokenUsage]:
-    """Async variant — identical prompt and contract to extract_structure()."""
-    prompt = EXTRACTION_PROMPT.format(complaint=complaint, reference=reference)
-    return await generate_json_async(prompt, max_output_tokens=3200)
+def _max_tokens(sub_issues) -> int:
+    return 3200 if not sub_issues else 3200 + 1200 * max(0, len(sub_issues) - 2)
+
+
+def extract_structure(complaint: str, reference: str = "",
+                      sub_issues: list[str] | None = None) -> tuple[dict, TokenUsage]:
+    return generate_json(_build_prompt(complaint, reference, sub_issues),
+                         max_output_tokens=_max_tokens(sub_issues), required_keys=("contexts",))
+
+
+async def extract_structure_async(complaint: str, reference: str = "",
+                                  sub_issues: list[str] | None = None) -> tuple[dict, TokenUsage]:
+    """Async variant. `sub_issues` is passed by the orchestrator's multi-issue
+    follow-up; a version of this file without the parameter crashed that path
+    with a TypeError the mocked unit tests could not see."""
+    return await generate_json_async(_build_prompt(complaint, reference, sub_issues),
+                                     max_output_tokens=_max_tokens(sub_issues), required_keys=("contexts",))

@@ -1,3 +1,4 @@
+import re
 """
 Hybrid retrieval over deeplinks.json: BM25 (sparse/keyword) + dense embeddings,
 matched against the DESCRIPTIVE metadata fields (description, message,
@@ -27,12 +28,49 @@ class DeeplinkEntry:
     searchable_text: str = ""
 
 
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_HYPHENATED_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+")
+
+
+def tokenize(text: str) -> list[str]:
+    """Lowercase alphanumeric tokens. Previously str.lower().split(), which
+    kept punctuation: "keys." never matched "keys", so the last word of
+    every step sentence was invisible to BM25."""
+    low = str(text).lower()
+    # Also emit the joined form of hyphenated terms: "Wi-Fi" -> wi, fi, wifi.
+    # The catalog says "Enable WiFi"; without this, "Turn On Wi-Fi" never
+    # matched it lexically (a real calibration abstention).
+    joined = [m.replace("-", "") for m in _HYPHENATED_RE.findall(low)]
+    return _TOKEN_RE.findall(low) + joined
+
+
+_BOILERPLATE_RE = re.compile(
+    r"\s*(?:via|in|on the device via)\s+(?:device|TV)\s+Settings(?:\s+on the device)?\.?\s*$", re.I)
+
+
+def catalog_search_text(item: dict, version: str = "v2") -> str:
+    """
+    v1: description + message + qna_description (original).
+    v2: + validation.key, the precise setting name ("Adaptive brightness"),
+        since messages are often generic; minus the "via device Settings on
+        the device" tail shared by 543/578 descriptions, which pulls every
+        embedding toward the same point.
+    """
+    desc = item.get("description", "") or ""
+    parts = [desc, item.get("message", ""), item.get("qna_description", "")]
+    if version == "v2":
+        parts[0] = _BOILERPLATE_RE.sub("", desc)
+        parts.append((item.get("validation") or {}).get("key", ""))
+    return " ".join(p for p in parts if p)
+
+
 class DeeplinkIndex:
     def __init__(
         self,
         catalog_path: str,
         alpha: float | None = None,
         bm25_saturation_k: float | None = None,
+        text_version: str | None = None,
     ):
         """
         alpha: weight given to dense score in the hybrid fusion.
@@ -40,6 +78,7 @@ class DeeplinkIndex:
         bm25_saturation_k: see _normalize_bm25 below.
         """
         self.alpha = settings.DEEPLINK_ALPHA if alpha is None else alpha
+        self.text_version = text_version or settings.RETRIEVAL_TEXT_VERSION
         self.bm25_saturation_k = (
             settings.BM25_SATURATION_K if bm25_saturation_k is None else bm25_saturation_k
         )
@@ -52,6 +91,12 @@ class DeeplinkIndex:
     def _load(self, catalog_path: str) -> None:
         with open(catalog_path, "r") as f:
             raw = json.load(f)
+        # Samsung's real deeplinks.json is {"_readme", "count", "deeplinks":
+        # [...]}, not a bare list. Iterating that dict yields its KEYS, so
+        # item["deeplink"] crashed the server at startup the moment the real
+        # file was dropped in. Accept both shapes.
+        if isinstance(raw, dict):
+            raw = raw.get("deeplinks") or []
 
         if not raw:
             # An empty catalog previously crashed the whole app at startup
@@ -69,13 +114,7 @@ class DeeplinkIndex:
             )
 
         for item in raw:
-            searchable = " ".join(
-                filter(None, [
-                    item.get("description", ""),
-                    item.get("message", ""),
-                    item.get("qna_description", ""),
-                ])
-            )
+            searchable = catalog_search_text(item, self.text_version)
             entry = DeeplinkEntry(
                 deeplink=item["deeplink"],
                 description=item.get("description", ""),
@@ -85,7 +124,7 @@ class DeeplinkIndex:
             self.entries.append(entry)
             self._catalog_by_uri[entry.deeplink] = item
 
-        tokenized = [e.searchable_text.lower().split() for e in self.entries]
+        tokenized = [tokenize(e.searchable_text) for e in self.entries]
         self._bm25 = BM25Okapi(tokenized)
         self._dense_matrix = embed_batch([e.searchable_text for e in self.entries])
 
@@ -93,25 +132,28 @@ class DeeplinkIndex:
     def catalog_by_uri(self) -> dict[str, dict]:
         return self._catalog_by_uri
 
-    def _normalize_bm25(self, scores: np.ndarray) -> np.ndarray:
+    def _normalize_bm25(self, scores: np.ndarray, query_tokens: list[str]) -> np.ndarray:
         """
-        Map raw BM25 scores into [0, 1) with a saturating transform
-        s / (s + k), NOT by dividing by the max.
+        Normalize raw BM25 into [0, 1] as QUERY COVERAGE: raw score divided
+        by the IDF mass of the query's distinct informative terms, clipped.
 
-        Why this changed: max-normalization forces the best-scoring entry to
-        exactly 1.0 on every query, no matter how weak the match actually is.
-        With alpha=0.5 that alone contributed 0.5 to the fused score, which
-        already clears the 0.35 confidence floor — so the floor could never
-        fire on the sparse side, and "reject low-similarity matches" was
-        silently a no-op. That is why a display fix was still getting a
-        battery-settings deeplink attached in the demo.
+        History: max-normalization forced top-1 to 1.0 on every query (the
+        floor could never fire). The fix, s/(s+k), was tuned on a 5-entry
+        placeholder catalog; on Samsung's 578-entry catalog raw scores are
+        larger, so every candidate saturated to 0.86-0.92 -- the margin
+        fired on nearly every action (correct matches discarded), while a
+        repair-center action matched "Android personalization service" at
+        0.87 on the single word "service" (confidently wrong).
 
-        A saturating transform is monotonic (ranking is unchanged) but keeps
-        the score ABSOLUTE, so a weak top-1 stays a low number and the floor
-        can actually reject it. k sets how fast it saturates.
+        Coverage is scale-free across catalog size and query length: an
+        entry matching most of the query's informative words scores high;
+        one matching a single common word scores low.
         """
-        k = self.bm25_saturation_k
-        return scores / (scores + k)
+        idf = self._bm25.idf
+        mass = sum(max(idf.get(t, 0.0), 0.0) for t in set(query_tokens))
+        if mass <= 0:
+            return np.zeros_like(scores)
+        return np.clip(scores / mass, 0.0, 1.0)
 
     def search(
         self, query: str, top_k: int = 5, alpha: float | None = None
@@ -124,9 +166,12 @@ class DeeplinkIndex:
         fusion_alpha = self.alpha if alpha is None else alpha
 
         # Sparse scores
-        bm25_scores = self._normalize_bm25(
-            np.array(self._bm25.get_scores(query.lower().split()))
-        )
+        # Unique tokens: BM25 sums per query token, so a word repeated in the
+        # match text (actionName is included twice) was counted 2-3x in the
+        # score but once in the coverage denominator -- inflating coverage
+        # (a repair action hit 0.86 on "service" alone).
+        q_tokens = list(dict.fromkeys(tokenize(query)))
+        bm25_scores = self._normalize_bm25(np.array(self._bm25.get_scores(q_tokens)), q_tokens)
 
         # Dense scores
         q_vec = embed(query)

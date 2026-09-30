@@ -20,11 +20,13 @@ complaint actually describes multiple DISTINCT issues rather than one.
 
 Complaint: "{complaint}"
 
-A complaint is multi-issue only if it names two or more separable
-problems that would need their own troubleshooting steps (e.g. "screen
-flickers AND battery dies fast" — a display problem and a power
-problem). Do NOT split a single issue described with extra detail (e.g.
-"screen flickers when I open the camera app" is ONE issue, not two).
+A complaint is multi-issue only if it names two or more problems with
+DIFFERENT root causes that need DIFFERENT fixes (e.g. "screen flickers
+AND storage is full" — a display fault and a storage problem). Symptoms
+that commonly share one cause are ONE issue: "screen flickers and the
+battery dies fast" is usually a single display/refresh-rate problem. Do
+NOT split a single issue described with extra detail (e.g. "screen
+flickers when I open the camera app" is ONE issue, not two).
 When genuinely unsure, prefer is_multi_issue: false — over-splitting a
 simple complaint into fake sub-issues is worse than treating a
 borderline case as one.
@@ -48,10 +50,10 @@ def _build_prompt(complaint: str, count: int) -> str:
 
 def enrich_query(complaint: str, paraphrase_count: int | None = None) -> tuple[dict, TokenUsage]:
     count = settings.ENRICHMENT_PARAPHRASE_COUNT if paraphrase_count is None else paraphrase_count
-    return generate_json(_build_prompt(complaint, count), max_output_tokens=900)
+    return generate_json(_build_prompt(complaint, count), max_output_tokens=1300, required_keys=("canonical_query",))
 
 
 async def enrich_query_async(complaint: str, paraphrase_count: int | None = None) -> tuple[dict, TokenUsage]:
     """Async variant — identical prompt and contract to enrich_query()."""
     count = settings.ENRICHMENT_PARAPHRASE_COUNT if paraphrase_count is None else paraphrase_count
-    return await generate_json_async(_build_prompt(complaint, count), max_output_tokens=900)
+    return await generate_json_async(_build_prompt(complaint, count), max_output_tokens=1300, required_keys=("canonical_query",))

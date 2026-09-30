@@ -3,9 +3,12 @@ Stage 2: Deeplink Mapping & Ordering.
 Resolves each action's target screen to a verbatim deeplink from the
 catalog (via hybrid retrieval), then orders actions: auto -> manual -> critical.
 """
+import re
+
 from app.core.config import settings
 from app.pipeline.deeplink_retrieval import DeeplinkIndex
 from app.models.schema import ActionCategory
+from app.pipeline.normalize import normalize_category
 
 # Per the theme spec's data-inputs section: "bixby://dummy_positive: A
 # reserved generic placeholder used exclusively when a step opens a valid
@@ -21,7 +24,144 @@ from app.models.schema import ActionCategory
 # certainly checking: consistently leaving auto actions deeplink-less
 # under low catalog coverage (today's 5-entry placeholder) would fail that
 # gate even though refusing to guess is otherwise the right call.
-_DUMMY_POSITIVE_URI = "bixby://dummy_positive"
+def _dummy_uri(index) -> str | None:
+    """Find the reserved placeholder by suffix, not a hardcoded scheme --
+    Samsung's real catalog uses voiceassist://, the placeholder used bixby://."""
+    return next((u for u in index.catalog_by_uri if u.endswith("dummy_positive")), None)
+
+# Samsung's catalog pairs most toggles: an onURL entry ("Enables X") and an
+# offURL entry ("Disables X") sharing one validation key. Their descriptions
+# differ by a single word, so they score almost identically, and the
+# ambiguity margin used to abstain on them -- discarding a correct deeplink.
+# The catalog readme says to match on originalType too: infer the intended
+# direction from the action text and pick the matching twin.
+_ON_RE = re.compile(r"\b(turn(?:ed|ing)?\s+on|switch(?:ed)?\s+on|enabl\w*|activat\w*|allow)\b", re.I)
+_OFF_RE = re.compile(r"\b(turn(?:ed|ing)?\s+off|switch(?:ed)?\s+off|disabl\w*|deactivat\w*)\b", re.I)
+_NAV_RE = re.compile(r"\b(?:tap|select|open|go to|navigate to|choose)\s+(?:on\s+)?(?:the\s+)?([A-Za-z][\w&' -]*)", re.I)
+
+
+INTENT_BONUS = 0.05
+
+
+_BARE_SETTINGS_STEP = re.compile(r"^\s*(?:open|launch|go to|navigate to(?: and open)?)\s+(?:the\s+)?settings(?:\s+app)?\.?\s*$", re.I)
+_UPDATE_RE = re.compile(r"\b(adjust|change|increase|decrease|reduce|lower|raise|set)\b", re.I)
+_VIEW_RE = re.compile(r"^\s*(view|open|check|see|review)\b", re.I)
+
+
+def _intent(action: dict) -> str | None:
+    text = " ".join([action.get("actionName", "")] +
+                    [s for g in (action.get("stepGroups") or []) for s in (g.get("steps") or [])])
+    # The action's LEADING verb decides. "Disable Allow apps to be pinned" and
+    # "Disable Double tap to turn on screen" contain on-words later in the
+    # name; scanning the whole text saw both on and off, gave up, and the
+    # enable twin won -- opposite-toggle errors in the catalog check.
+    lead = action.get("actionName", "").strip().lower()
+    if re.match(r"(enable|turn on|switch on|activate)\b", lead):
+        return "onURL"
+    if re.match(r"(disable|turn off|switch off|deactivate|remove)\b", lead):
+        return "offURL"
+    on, off = bool(_ON_RE.search(text)), bool(_OFF_RE.search(text))
+    if on != off:
+        return "onURL" if on else "offURL"
+    # Catalog originalType also distinguishes updateURL ("Adjust Timeout")
+    # and onClickURL ("View Reset Options"). Judge those from the action name
+    # only -- every step list says "Open Settings", which would make
+    # everything look like a view action.
+    name = action.get("actionName", "")
+    if _UPDATE_RE.search(name):
+        return "updateURL"
+    if _VIEW_RE.search(name):
+        return "onClickURL"
+    return None
+
+
+def _twin_key(uri: str, catalog: dict) -> str:
+    item = catalog.get(uri) or {}
+    return (item.get("validation") or {}).get("key") or uri
+
+
+def _collapse_twins(results, catalog: dict, intent: str | None):
+    """Keep one candidate per setting (twins share a validation key): the
+    one whose originalType matches the intent, at the group's best score.
+    Twins are the SAME setting, so they must not count as ambiguity."""
+    groups: dict[str, list] = {}
+    for e, sc in results:
+        groups.setdefault(_twin_key(e.deeplink, catalog), []).append((e, sc))
+    out = []
+    for members in groups.values():
+        best = max(sc for _, sc in members)
+        # With no explicit "off" wording, a fix enables the thing it names
+        # (sample_output: "Back Up Phone Data" -> the onURL "Enable Back up
+        # data" entry), so twins default to onURL.
+        want = intent or "onURL"
+        pick = next(((e, best) for e, _ in members
+                     if (catalog.get(e.deeplink) or {}).get("originalType") == want), None)
+        e, sc = pick or max(members, key=lambda m: m[1])
+        # Explicit on/off wording that matches the entry's originalType is
+        # strong evidence (catalog readme: match on originalType too).
+        if intent and (catalog.get(e.deeplink) or {}).get("originalType") == intent:
+            sc += INTENT_BONUS
+        out.append((e, sc))
+    return sorted(out, key=lambda m: -m[1])
+
+
+_ACTION_STEP_RE = re.compile(r"^\s*(select|choose|toggle|turn|switch|swipe|confirm|enter|type|drag|press)\b", re.I)
+_ACTION_WORDS = {"install", "download", "reset", "delete", "restart", "confirm", "apply", "save", "ok", "done", "update"}
+_DETERMINERS = {"your", "the", "my", "a", "an", "this", "that"}
+_GENERIC_UI = {"icon", "button", "option", "options", "gear", "toggle", "switch", "list", "tab", "field", "item",
+               "menu", "more", "three-dot", "dot", "arrow", "back", "ok", "done"}
+_LABEL_STOP = {"and", "or", "the", "a", "an", "to", "of", "for", "on", "in"}
+
+
+def _screen_label(action: dict) -> str:
+    """
+    Name the concrete screen from the steps (for dummy_positive's
+    description/message, which the catalog says we must write). The FINAL
+    step is often an action, not a screen -- "Select Buttons", "Tap Download
+    and install" produced "Buttons" / "Download and" in a real run -- so it
+    is only used when it reads like navigation.
+    """
+    steps = [s for g in (action.get("stepGroups") or []) for s in (g.get("steps") or [])]
+    targets = []
+    for k, step in enumerate(steps):
+        last = k == len(steps) - 1
+        if last and _ACTION_STEP_RE.match(step):
+            continue
+        for m in _NAV_RE.finditer(step):
+            cand = re.sub(r"[^\w&' -]", "", m.group(1)).strip()
+            if not cand or cand.lower() in ("settings", "the settings", "settings app"):
+                continue
+            if last and _ACTION_WORDS & set(cand.lower().split()):
+                continue
+            # "your email" -> "email"; skip UI widgets ("icon", "gear icon")
+            words = [w for w in cand.split() if w.lower() not in _DETERMINERS]
+            if not words or all(w.lower() in _GENERIC_UI for w in words):
+                continue
+            targets.append(" ".join(words))
+    words = (targets[-1] if targets else action.get("actionName", "") or "relevant").split()
+    words = [w for w in words if w.lower() not in ("settings", "setting", "menu", "screen", "page")][:2]
+    while words and words[-1].lower() in _LABEL_STOP:
+        words.pop()
+    return " ".join(words) or "relevant"
+
+
+_NOT_SETTINGS_APP = ("quick settings", "quick panel", "notification panel")
+
+
+def _navigates_settings(action: dict) -> bool:
+    """True if a step opens the Settings app. The Quick settings PANEL
+    (swipe down) is not a Settings screen, so it doesn't qualify for the
+    dummy_positive placeholder -- a real run linked "Verify Internet
+    Connection" to "Open the Quick settings page"."""
+    for g in (action.get("stepGroups") or []):
+        for s in (g.get("steps") or []):
+            low = s.lower()
+            for phrase in _NOT_SETTINGS_APP:
+                low = low.replace(phrase, "")
+            if "settings" in low:
+                return True
+    return False
+
 
 _CATEGORY_ORDER = {
     ActionCategory.auto: 0,
@@ -50,6 +190,10 @@ def _match_text(action: dict) -> str:
         for step in (group.get("steps") or [])
     ]
     name = action.get("actionName", "")
+    if settings.RETRIEVAL_TEXT_VERSION == "v2":
+        # "Open Settings." is step 1 of almost every action and matches every
+        # catalog entry equally; it carries no information about the target.
+        steps = [s for s in steps if not _BARE_SETTINGS_STEP.match(s)]
     return " ".join([name, name, *steps]).strip()
 
 
@@ -101,8 +245,10 @@ def resolve_deeplinks(
         # weak real candidate). It's filtered out below before floor/margin
         # logic runs, so it never wins a "real" match or gets offered as an
         # ambiguous candidate next to legitimate options.
-        raw_results = index.search(query_text, top_k=3, alpha=alpha)
-        results = [(e, s) for e, s in raw_results if e.deeplink != _DUMMY_POSITIVE_URI]
+        raw_results = index.search(query_text, top_k=6, alpha=alpha)
+        dummy_uri = _dummy_uri(index)
+        results = [(e, s) for e, s in raw_results if e.deeplink != dummy_uri]
+        results = _collapse_twins(results, index.catalog_by_uri, _intent(action))
 
         resolved = False
         if results:
@@ -117,8 +263,10 @@ def resolve_deeplinks(
                         "deeplink": entry.deeplink,
                         "description": catalog_item.get("description", ""),
                         "message": catalog_item.get("message", ""),
+                        # Spec's sample output carries originalType; it was dropped.
+                        "originalType": catalog_item.get("originalType"),
                     }
-                confidences[action.get("actionName", "")] = score
+                confidences[action.get("actionName", "")] = min(1.0, score)
                 resolved = True
             elif floor_ok and not unambiguous:
                 # Two catalog entries score near-identically: the index has
@@ -138,24 +286,31 @@ def resolve_deeplinks(
                 })
 
         if not resolved:
-            # Floor rejection (no confident specific candidate) or ambiguity
-            # (two candidates, neither more credible than the other): either
-            # way this "auto" action was, by construction, meant to open a
-            # real settings screen — the LLM only assigns category="auto"
-            # for actions it considers safely reachable via deeplink. Rather
-            # than leave actionableDeeplink absent, fall back to the
-            # catalog's own reserved placeholder for exactly this situation.
-            # Ambiguous cases keep BOTH: the placeholder satisfies "carries
-            # a valid actionable deeplink" while ambiguous_matches still
-            # offers the specific disambiguation as bonus wrapper data.
-            dummy = index.catalog_by_uri.get(_DUMMY_POSITIVE_URI)
-            if dummy:
+            # hybrid (default): a step that opens a Settings screen with no
+            # confident catalog match -> the catalog's own dummy_positive
+            # placeholder, with description/message written from the steps
+            # (as the catalog entry instructs). Anything else (service
+            # center, physical action) -> manual + null, as in Samsung's
+            # sample_output.json.
+            dummy_uri = _dummy_uri(index)
+            policy = settings.UNMATCHED_AUTO_POLICY
+            use_dummy = dummy_uri and (policy == "dummy_positive" or
+                                       (policy == "hybrid" and _navigates_settings(action)))
+            if use_dummy:
+                dummy = index.catalog_by_uri[dummy_uri]
+                screen = _screen_label(action)
                 for step_group in (action.get("stepGroups") or []):
                     step_group["actionableDeeplink"] = {
-                        "deeplink": _DUMMY_POSITIVE_URI,
-                        "description": dummy.get("description", ""),
-                        "message": dummy.get("message", ""),
+                        "deeplink": dummy_uri,
+                        "description": f"Opens the {screen} screen in Settings",
+                        "message": f"Open the {screen} settings page",
+                        "originalType": dummy.get("originalType"),
                     }
+            else:
+                action["category"] = "manual"
+                for step_group in (action.get("stepGroups") or []):
+                    step_group["actionableDeeplink"] = None
+                    step_group["validationDeeplink"] = None
     return actions, ambiguous_matches, confidences
 
 
@@ -163,54 +318,33 @@ _VALID_RESULT_TYPES = {"boolean", "integer", "str", "float"}
 _VALID_CONDITIONS = {"greater", "equal", "less"}
 
 
-def attach_validation_deeplinks(actions: list[dict]) -> list[dict]:
+def attach_validation_deeplinks(actions: list[dict], catalog_by_uri: dict | None = None) -> list[dict]:
     """
-    Wires up StepGroup.validationDeeplink — an official Appendix A field
-    (key/resultType/condition/value) that was previously always absent.
-    It's meant to let a client verify an action actually worked (e.g. "is
-    Motion Smoothness now Standard?"), not just guide the user through it.
+    validationDeeplink is copied VERBATIM from the matched catalog entry's
+    own `validation` block -- deeplink, key, and (where the catalog has them)
+    resultType/condition/value. Samsung's sample_output.json does exactly
+    this (DL-0542 -> key "Back up data (TechCorp Cloud)", boolean/equal/True).
 
-    Design note / limitation: the placeholder catalog has no entries
-    dedicated to state-checking, only navigation-target entries. Rather
-    than invent an unverifiable URI, this reuses the SAME already
-    catalog-verified actionableDeeplink as the validation target — i.e.
-    "read back the screen you just sent the user to" rather than a
-    distinct verification endpoint. That keeps the "no hallucinated
-    deeplinks" guarantee intact for this field too. If Samsung's real
-    catalog exposes dedicated validation-type entries, swap the source
-    URI here for a proper catalog lookup instead of reusing the
-    actionable one.
-
-    Only attaches when: the action resolved an actionableDeeplink (nothing
-    to validate against otherwise), extraction supplied an `expectedOutcome`
-    for that action, and its shape is valid — an malformed/partial
-    expectedOutcome is silently dropped rather than raising, since this is
-    a bonus field, not one the response should fail over.
+    Previously the key/resultType/value came from an LLM-proposed
+    expectedOutcome, and when the catalog had no validation entry the
+    actionable URI was reused as the validation target. Both were invented
+    data; with the real catalog (validation on 570/578 entries) neither is
+    needed. No catalog validation -> no validationDeeplink.
     """
+    catalog_by_uri = catalog_by_uri or {}
     for action in actions:
-        outcome = action.get("expectedOutcome")
-        if not isinstance(outcome, dict):
-            continue
-
-        key = outcome.get("key")
-        result_type = outcome.get("resultType")
-        condition = outcome.get("condition")
-        value = outcome.get("value")
-        if not (key and result_type in _VALID_RESULT_TYPES
-                and condition in _VALID_CONDITIONS and value is not None):
-            continue
-
+        action.pop("expectedOutcome", None)
         for step_group in (action.get("stepGroups") or []):
             actionable = step_group.get("actionableDeeplink")
-            if not actionable:
-                continue  # nothing resolved to validate against
-            step_group["validationDeeplink"] = {
-                "deeplink": actionable["deeplink"],
-                "key": key,
-                "resultType": result_type,
-                "condition": condition,
-                "value": str(value),
-            }
+            val = (catalog_by_uri.get(actionable["deeplink"]) or {}).get("validation") if actionable else None
+            if isinstance(val, dict) and val.get("deeplink") and val.get("key"):
+                step_group["validationDeeplink"] = {
+                    k: (str(val[k]) if k == "value" else val[k])
+                    for k in ("deeplink", "key", "resultType", "condition", "value")
+                    if val.get(k) is not None
+                }
+            elif actionable is not None:
+                step_group.pop("validationDeeplink", None)
     return actions
 
 
@@ -219,6 +353,6 @@ def order_actions(actions: list[dict]) -> list[dict]:
     return sorted(
         actions,
         key=lambda a: _CATEGORY_ORDER.get(
-            ActionCategory(a.get("category", "manual")), 1
+            ActionCategory(normalize_category(a.get("category"))), 1
         ),
     )
