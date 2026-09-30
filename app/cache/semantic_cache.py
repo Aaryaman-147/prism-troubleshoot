@@ -38,6 +38,7 @@ The expensive part (embed()) is deliberately done OUTSIDE the lock — it is
 pure and touches no shared state, so holding the lock across it would
 serialize every request on the embedding model for no benefit.
 """
+import re
 import threading
 import time
 import uuid
@@ -61,6 +62,15 @@ class CacheCluster:
     centroid_n: int = 1            # vectors averaged into the centroid (>= merged_count)
     members: list[np.ndarray] = field(default_factory=list)
     paraphrases_seen: list[str] = field(default_factory=list)
+    # The enrichment stage's generated paraphrases. A cache hit must still
+    # return spec-compliant query_variations (8-10); paraphrases_seen only
+    # holds the 1-2 user queries this cluster has served.
+    variations: list[str] = field(default_factory=list)
+    # Fingerprint of the SIIS reference the plan was grounded in (None =
+    # unknown, e.g. pre-warmed). A request supplying a DIFFERENT reference
+    # must not be served this plan: 6 of Samsung's 20 queries share a
+    # document title and describe similar symptoms.
+    reference_fp: Optional[str] = None
 
 
 @dataclass
@@ -77,6 +87,47 @@ class CacheLookupResult:
 MAX_MEMBERS_PER_CLUSTER = 16
 
 
+_SHORTHAND = {"n": "and", "u": "you", "ur": "your", "pls": "please", "plz": "please", "b4": "before",
+              "r": "are", "coz": "because", "cuz": "because", "bcoz": "because", "wont": "won't",
+              "cant": "can't", "doesnt": "doesn't", "isnt": "isn't", "dont": "don't", "phn": "phone",
+              "fone": "phone", "batt": "battery"}
+_TOKEN_RE = re.compile(r"[A-Za-z']+|[^A-Za-z']+")
+_LEXICON_LIST: list[str] = []
+
+
+def normalize_for_matching(text: str) -> str:
+    """
+    Undo chat shorthand and obvious typos before embedding for cache
+    matching, so "scren flickers n battery dies fast" is matched as "screen
+    flickers and battery dies fast" (it scored 0.717 and missed). Only
+    lowercase words of 4+ letters that aren't known words, with a close
+    (>= 0.8) match in the English/device lexicon, are corrected; product
+    names are left alone. The stored/returned query text is never changed.
+    """
+    global _LEXICON_LIST
+    import difflib
+    from app.pipeline.language import _EN_LEXICON, _NEUTRAL
+    out = []
+    for tok in _TOKEN_RE.findall(str(text or "")):
+        low = tok.lower()
+        if not tok[:1].isalpha():
+            out.append(tok); continue
+        if low in _SHORTHAND:
+            out.append(_SHORTHAND[low]); continue
+        if len(low) >= 4 and low not in _EN_LEXICON and low not in _NEUTRAL and tok == low:
+            if not _LEXICON_LIST:
+                _LEXICON_LIST = sorted(w for w in _EN_LEXICON if len(w) >= 4)
+            m = difflib.get_close_matches(low, _LEXICON_LIST, n=1, cutoff=0.8)
+            if m:
+                out.append(m[0]); continue
+        out.append(tok)
+    return "".join(out)
+
+
+def _norm_text(text: str) -> str:
+    return " ".join(str(text or "").lower().split())
+
+
 class SemanticCache:
     def __init__(
         self,
@@ -89,10 +140,19 @@ class SemanticCache:
         # Re-entrant so a future method can call another locked method
         # without deadlocking itself.
         self._lock = threading.RLock()
+        # Exact-repeat index: normalized text -> cluster id. A repeat of any
+        # phrasing already in a cluster resolves without running the model.
+        # (Semantic matching still handles everything else.)
+        self._exact: dict[str, str] = {}
 
     def lookup(self, query: str) -> CacheLookupResult:
         t0 = time.perf_counter()
-        vec = embed(query)  # outside the lock on purpose — see module docstring
+        with self._lock:
+            cid = self._exact.get(_norm_text(query))
+            exact_cluster = self._clusters.get(cid) if cid else None
+        if exact_cluster is not None:
+            return CacheLookupResult("hit", exact_cluster, 1.0, (time.perf_counter() - t0) * 1000)
+        vec = embed(normalize_for_matching(query))  # outside the lock on purpose — see module docstring
 
         best_sim = -1.0
         best_cluster: Optional[CacheCluster] = None
@@ -138,6 +198,8 @@ class SemanticCache:
         query: str,
         payload: ContextDeeplinkResponse,
         seed_texts: Optional[list[str]] = None,
+        variations: Optional[list[str]] = None,
+        reference_fp: Optional[str] = None,
     ) -> CacheCluster:
         """
         Create a cluster for `query`.
@@ -173,7 +235,7 @@ class SemanticCache:
             unique_texts.remove(query)
         unique_texts.insert(0, query)
 
-        vecs = [embed(t) for t in unique_texts]
+        vecs = [embed(normalize_for_matching(t)) for t in unique_texts]
         centroid = np.mean(vecs, axis=0)
         norm = np.linalg.norm(centroid)
         if norm > 0:
@@ -187,19 +249,25 @@ class SemanticCache:
             centroid_n=len(vecs),
             members=vecs[:MAX_MEMBERS_PER_CLUSTER],
             paraphrases_seen=[query],
+            variations=list(variations or []),
+            reference_fp=reference_fp,
         )
         with self._lock:
             self._clusters[cluster.cluster_id] = cluster
+            for t in unique_texts:
+                self._exact[_norm_text(t)] = cluster.cluster_id
         return cluster
 
     def merge_into_cluster(self, cluster: CacheCluster, query: str) -> None:
+        with self._lock:
+            self._exact[_norm_text(query)] = cluster.cluster_id
         """
         Absorb a near-miss paraphrase into an existing cluster by updating
         its centroid as a running mean, re-normalized. This is what keeps
         the cache from fragmenting into many near-duplicate entries for
         trivial rephrasings — the exact failure mode named in the spec.
         """
-        vec = embed(query)
+        vec = embed(normalize_for_matching(query))
         # The read-modify-write of centroid/merged_count must be atomic:
         # two threads merging concurrently would otherwise both read the
         # same `n`, and one update would be silently lost.
@@ -231,7 +299,7 @@ class SemanticCache:
                     "cluster_id": c.cluster_id,
                     "canonical_query": c.canonical_query,
                     "merged_count": c.merged_count,
-                    "paraphrases_seen": list(c.paraphrases_seen),
+                    "paraphrase_count": len(c.paraphrases_seen),
                 }
                 for c in self._clusters.values()
             ]
