@@ -144,7 +144,7 @@ or without a `.env`. Every setting has its calibrated default in code.
 
 ## Ablation study
 
-Samsung's Appendix C §5 compares deeplink-mapping architectures.
+Samsung's Appendix C compares deeplink-mapping architectures.
 `python scripts/ablation.py --llm` runs all three on the same labelled probes
 (hand-written + generated across every catalog type) and writes
 `results/ablation_results.md`:
@@ -179,7 +179,7 @@ Further ablations (from `scripts/calibrate_retrieval.py` and batch runs):
 | LLM reasoning on → **off** | cold P95 76 s → 9–19 s; far fewer malformed outputs |
 | Action ordering | rule-based auto → manual → critical: **0** safety violations in every run |
 
-## Implementation roadmap (spec §8)
+## Implementation roadmap
 
 All four phases of Samsung's roadmap are complete:
 - **Phase 1:** validation harness against Samsung's `schema.py` and sample output.
