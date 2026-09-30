@@ -328,13 +328,11 @@ python scripts/finalize_metrics.py                 # complete Appendix C metrics
 
 Complete: the full pipeline on Samsung's real data, all spec constraints
 enforced in code, calibration and ablation on real data, evaluation toolkit,
-frontend, Docker, multilingual input, a concurrency stress test, and 373 tests. Done: human review of 49 plans. Pending: re-running the ablation and catalog
-check at the final thresholds (see HANDOFF.md).
+frontend, Docker, multilingual input, a concurrency stress test, and 373 tests. Done: human review of 49 plans.
 
 ## Submission
 
-The judged version is the commit tagged **`PRISM_GENAI_HACKATHON_Y2026`**
-(see HANDOFF.md for the exact commands).
+The judged version is the commit tagged **`PRISM_GENAI_HACKATHON_Y2026`**.
 
 ## License
 
