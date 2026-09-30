@@ -16,10 +16,16 @@ def get_embedding_model() -> SentenceTransformer:
     return SentenceTransformer(settings.EMBEDDING_MODEL)
 
 
-def embed(text: str) -> np.ndarray:
+@lru_cache(maxsize=8192)
+def _embed_cached(text: str) -> np.ndarray:
     model = get_embedding_model()
-    vec = model.encode(text, convert_to_numpy=True, normalize_embeddings=True)
-    return vec
+    return model.encode(text, convert_to_numpy=True, normalize_embeddings=True)
+
+
+def embed(text: str) -> np.ndarray:
+    """Memoized: each distinct text is encoded once. The stress test showed
+    concurrent cache hits queueing behind repeated model calls."""
+    return _embed_cached(text).copy()
 
 
 def embed_batch(texts: list[str]) -> np.ndarray:

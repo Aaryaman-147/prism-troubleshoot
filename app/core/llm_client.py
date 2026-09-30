@@ -80,7 +80,68 @@ def _clean_json_text(text: str) -> str:
     return text[start:]
 
 
-def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> tuple[dict, TokenUsage]:
+def _is_transient_server_error(e: Exception) -> bool:
+    """503 'Service temporarily overloaded' etc. from NVIDIA/OpenRouter --
+    previously not retried, so one overloaded moment failed the request."""
+    if type(e).__name__ in {"InternalServerError", "APIConnectionError", "APITimeoutError", "ServiceUnavailableError"}:
+        return True
+    return getattr(e, "status_code", 0) in (500, 502, 503, 504)
+
+
+def _top_level_objects(text: str):
+    """Yield every top-level balanced {...} span. Quotes are only tracked
+    inside an object, so apostrophes/quotes in surrounding prose don't
+    confuse the scan."""
+    depth, start, in_str, esc = 0, None, False, False
+    for i, ch in enumerate(text):
+        if depth and in_str:
+            if esc: esc = False
+            elif ch == "\\": esc = True
+            elif ch == '"': in_str = False
+            continue
+        if depth and ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0: start = i
+            depth += 1
+        elif ch == "}" and depth:
+            depth -= 1
+            if depth == 0:
+                yield text[start:i + 1]
+
+
+def _parse_json(text: str, required_keys=None) -> dict:
+    """
+    Without required_keys: first balanced object (previous behaviour).
+    With required_keys: the first object that parses AND contains one of
+    them. Reasoning models sometimes quote a small JSON example before the
+    real answer; in a real run the parser returned {"key": "wifi_connected",
+    ...} from the reasoning instead of the {"contexts": [...]} answer.
+    """
+    if not required_keys:
+        return json.loads(_clean_json_text(text))
+    stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", (text or "").strip())
+    for span in _top_level_objects(stripped):
+        try:
+            obj = json.loads(span)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and any(k in obj for k in required_keys):
+            return obj
+    raise json.JSONDecodeError(f"no JSON object containing any of {list(required_keys)}", stripped[:200], 0)
+
+
+def _thinking_kwargs() -> dict:
+    """NVIDIA's Nemotron 3 models reason by default; that text consumed the
+    output budget (truncated JSON, 76-102 s cases) and leaked into content.
+    chat_template_kwargs.enable_thinking=false turns it off. Only sent to
+    NVIDIA's endpoint, where it is documented."""
+    if settings.LLM_DISABLE_THINKING and "nvidia.com" in str(settings.OPENROUTER_BASE_URL):
+        return {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
+    return {}
+
+
+def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int, required_keys=None) -> tuple[dict, TokenUsage]:
     import google.generativeai as genai
     from google.api_core.exceptions import ResourceExhausted
 
@@ -117,7 +178,7 @@ def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> t
                     f"generated - try raising it."
                 )
             try:
-                parsed = json.loads(_clean_json_text(resp.text))
+                parsed = _parse_json(resp.text, required_keys)
             except json.JSONDecodeError:
                 print(f"[JSON PARSE FAILED] model={settings.LLM_MODEL}")
                 print(f"Raw content (first 500 chars): {resp.text[:500]}")
@@ -156,15 +217,16 @@ def _generate_gemini(prompt: str, max_output_tokens: int, max_retries: int) -> t
     raise LLMRateLimitError(f"Gemini quota exhausted after {max_retries + 1} attempts: {last_error}")
 
 
-def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) -> tuple[dict, TokenUsage]:
+def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int, required_keys=None) -> tuple[dict, TokenUsage]:
     from openai import OpenAI, RateLimitError
 
     global _openrouter_client
 
     if _openrouter_client is None:
         _openrouter_client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
+            base_url=settings.OPENROUTER_BASE_URL,
             api_key=settings.OPENROUTER_API_KEY,
+            timeout=settings.LLM_TIMEOUT_S,
         )
 
     last_error = None
@@ -177,7 +239,8 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_output_tokens,
                 temperature=settings.LLM_TEMPERATURE,
-                response_format={"type": "json_object"},
+                **({"response_format": {"type": "json_object"}} if settings.LLM_JSON_MODE else {}),
+                **_thinking_kwargs(),
             )
 
             if not resp.choices:
@@ -207,7 +270,7 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
                 )
 
             try:
-                return json.loads(_clean_json_text(content)), usage
+                return _parse_json(content, required_keys), usage
             except json.JSONDecodeError as e:
                 print(f"[JSON PARSE FAILED] model={settings.OPENROUTER_MODEL}")
                 print(f"Raw content (first 500 chars): {content[:500]}")
@@ -241,6 +304,17 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
                 time.sleep(wait)
             continue
 
+        except Exception as e:
+            if not _is_transient_server_error(e):
+                raise
+            last_error = e
+            last_error_was_empty_response = True   # not quota: surface as a generation failure
+            wait = 5 * (attempt + 1)
+            if attempt < max_retries:
+                print(f"[provider server error] {type(e).__name__} attempt {attempt + 1}/{max_retries + 1}, waiting {wait}s")
+                time.sleep(wait)
+            continue
+
     if last_error_was_empty_response:
         raise ValueError(
             f"OpenRouter returned an empty/malformed response "
@@ -251,13 +325,13 @@ def _generate_openrouter(prompt: str, max_output_tokens: int, max_retries: int) 
         f"{max_retries + 1} attempts: {last_error}"
     )
 
-def generate_json(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2) -> tuple[dict, TokenUsage]:
+def generate_json(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2, required_keys=None) -> tuple[dict, TokenUsage]:
     if settings.LLM_PROVIDER == "openrouter":
-        return _generate_openrouter(prompt, max_output_tokens, max_retries)
-    return _generate_gemini(prompt, max_output_tokens, max_retries)
+        return _generate_openrouter(prompt, max_output_tokens, max_retries, required_keys)
+    return _generate_gemini(prompt, max_output_tokens, max_retries, required_keys)
 
 
-async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_retries: int) -> tuple[dict, TokenUsage]:
+async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_retries: int, required_keys=None) -> tuple[dict, TokenUsage]:
     from openai import AsyncOpenAI, RateLimitError
 
     global _openrouter_async_client, _async_client_loop
@@ -265,8 +339,9 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
     current_loop = asyncio.get_running_loop()
     if _openrouter_async_client is None or _async_client_loop is not current_loop:
         _openrouter_async_client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
+            base_url=settings.OPENROUTER_BASE_URL,
             api_key=settings.OPENROUTER_API_KEY,
+            timeout=settings.LLM_TIMEOUT_S,
         )
         _async_client_loop = current_loop
 
@@ -280,7 +355,8 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_output_tokens,
                 temperature=settings.LLM_TEMPERATURE,
-                response_format={"type": "json_object"},
+                **({"response_format": {"type": "json_object"}} if settings.LLM_JSON_MODE else {}),
+                **_thinking_kwargs(),
             )
 
             if not resp.choices:
@@ -310,7 +386,7 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
                 )
 
             try:
-                return json.loads(_clean_json_text(content)), usage
+                return _parse_json(content, required_keys), usage
             except json.JSONDecodeError:
                 print(f"[JSON PARSE FAILED] model={settings.OPENROUTER_MODEL}")
                 print(f"Raw content (first 500 chars): {content[:500]}")
@@ -344,6 +420,17 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
                 await asyncio.sleep(wait)
             continue
 
+        except Exception as e:
+            if not _is_transient_server_error(e):
+                raise
+            last_error = e
+            last_error_was_empty_response = True   # not quota: surface as a generation failure
+            wait = 5 * (attempt + 1)
+            if attempt < max_retries:
+                print(f"[provider server error] {type(e).__name__} attempt {attempt + 1}/{max_retries + 1}, waiting {wait}s")
+                await asyncio.sleep(wait)
+            continue
+
     if last_error_was_empty_response:
         raise ValueError(
             f"OpenRouter returned an empty/malformed response "
@@ -355,9 +442,9 @@ async def _generate_openrouter_async(prompt: str, max_output_tokens: int, max_re
     )
 
 
-async def generate_json_async(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2) -> tuple[dict, TokenUsage]:
+async def generate_json_async(prompt: str, max_output_tokens: int = 1500, max_retries: int = 2, required_keys=None) -> tuple[dict, TokenUsage]:
     if settings.LLM_PROVIDER == "openrouter":
-        return await _generate_openrouter_async(prompt, max_output_tokens, max_retries)
+        return await _generate_openrouter_async(prompt, max_output_tokens, max_retries, required_keys)
     return await asyncio.to_thread(
-        _generate_gemini, prompt, max_output_tokens, max_retries
+        _generate_gemini, prompt, max_output_tokens, max_retries, required_keys
     )
