@@ -303,9 +303,6 @@ python scripts/finalize_metrics.py                 # complete Appendix C metrics
   9–19 s across runs on NVIDIA's free endpoint, above the 8 s target. A 30 s
   per-call timeout now cuts off degenerate responses (one took 104 s). A repair time budget skips optional LLM
   calls once a request passes 6 s.
-- **Plans are written in English.** Non-English complaints are understood
-  and answered, but the plan text follows Samsung's English documents and the
-  spec's English rules.
 - **Latin-script language detection is heuristic.** It looks for common
   English words, so a very short non-English complaint may be treated as
   English.
